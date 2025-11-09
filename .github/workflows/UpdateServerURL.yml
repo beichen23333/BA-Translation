@@ -20,6 +20,11 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
 
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
@@ -31,7 +36,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Update server
-        run: python BA-Unpack/update_urls.py info.json
+        run: python update_urls.py info.json
 
       - name: Check if ba.env was modified
         run: |

@@ -29,6 +29,11 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
 
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
@@ -56,27 +61,31 @@ jobs:
         if: ${{ inputs.Unpack_FlatData }}
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
-
-      - name: Clone repositories
-        run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Setup FlatData
         if: ${{ inputs.Unpack_FlatData }}
         run: |
-          python BA-Unpack/setup_flatdata.py
+          python setup_flatdata.py
 
       - name: Downloads Table files
         if: ${{ inputs.Unpack_FlatData }}
         run: |
-          chmod +x BA-Unpack/update.sh
-          ./BA-Unpack/update.sh
+          chmod +x update.sh
+          ./update.sh
+
+      - name: Run MemoryPackRepacker
+        run: |
+          chmod +x ./MemoryPackRepacker
+          ./MemoryPackRepacker deserialize media ./downloads/MediaResources/Catalog/MediaCatalog.bytes MediaCatalog.json
+          ./MemoryPackRepacker deserialize table  ./downloads/TableBundles/TableCatalog.bytes TableCatalog.json
+          ./MemoryPackRepacker deserialize asset  ./downloads/Android_PatchPack/BundlePackingInfo.bytes BundlePackingInfo-Android.json
+          ./MemoryPackRepacker deserialize asset  ./downloads/iOS_PatchPack/BundlePackingInfo.bytes   BundlePackingInfo-iOS.json
 
       - name: Unpack ExcelDB.db and Excel.zip
         if: ${{ inputs.Unpack_FlatData }}
         run: |
-          python BA-Unpack/unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData config.json ../BA-Text 10
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData config.json BA-Text 10
 
       - name: Committing FlatData
         if: ${{ inputs.Unpack_FlatData }}
@@ -99,3 +108,6 @@ jobs:
           git commit -m "Add version ${BA_VERSION_NAME}"
           git push origin
 
+      - name: Clone repositories
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
