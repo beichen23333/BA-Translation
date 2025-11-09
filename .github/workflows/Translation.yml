@@ -1,0 +1,75 @@
+name: Translation
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: 'File path'
+        required: true
+        default: 'BA-Text/New'
+        type: string
+      output_path:
+        description: 'Output path'
+        required: true
+        default: 'BA-Text/Translation'
+        type: string
+      batch_size:
+        description: 'Translation batch size'
+        required: true
+        default: '20'
+        type: string
+      max_workers:
+        description: 'Max workers(thread)'
+        required: true
+        default: '10'
+        type: string
+  repository_dispatch:
+    types: [Translation]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Clone repositories
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Tools.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Tools/* .
+          rm -rf BA-Tools
+
+      - name: Run translation
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python translation.py "${{ inputs.file_path }}" translation_noun.txt "${{ inputs.output_path }}" config.json "${{ inputs.batch_size }}" "${{ inputs.max_workers }}"
+
+      - name: Commit translation files
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          cd BA-Text
+          git add .
+
+          git commit -m "Commit translation."
+          git push origin
