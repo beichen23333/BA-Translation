@@ -39,6 +39,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
       - name: Get version
         id: get-versions
         run: bash version.sh info.json >> "$GITHUB_OUTPUT"
@@ -76,24 +81,17 @@ jobs:
       - name: Committing FlatData
         if: ${{ inputs.Unpack_FlatData }}
         run: |
-          cd BA-Unpack
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
           cd ./Extracted/FlatData/
           zip -j "FlatData${BA_VERSION_NAME}.zip" *
-          mv "FlatData${BA_VERSION_NAME}.zip" ../../../BA-FlatData/
-          cd ../../../BA-FlatData
+          mv "FlatData${BA_VERSION_NAME}.zip" ../../BA-FlatData/
+          cd ../../BA-FlatData
           git add "FlatData${BA_VERSION_NAME}.zip"
-          git commit -m "Committing."
+          git commit -m "FlatData${BA_VERSION_NAME}.zip"
           git push origin
-          cd
 
       - name: Committing TableBundles
         if: ${{ inputs.Unpack_FlatData }}
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json
