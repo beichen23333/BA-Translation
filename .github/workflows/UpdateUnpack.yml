@@ -69,7 +69,7 @@ jobs:
 
       - name: Get version
         id: get-versions
-        run: bash version.sh ba.env >> "$GITHUB_OUTPUT"
+        run: bash version.sh info.json >> "$GITHUB_OUTPUT"
 
       - name: Get version name
         run: |
