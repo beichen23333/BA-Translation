@@ -86,7 +86,7 @@ jobs:
           git commit -m "FlatData${BA_VERSION_NAME}.zip"
           git push origin
 
-      - name: Committing TableBundles
+      - name: Committing TableBundles to Text
         run: |
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
@@ -99,7 +99,7 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
-      - name: Committing TableBundles
+      - name: Committing TableBundles to Assets
         shell: bash
         run: |
           set -e
