@@ -17,8 +17,9 @@ permissions:
   contents: write
 
 jobs:
-  deploy:
+  Table:
     runs-on: ubuntu-latest
+    if: ${{ inputs.Unpack_FlatData }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,37 +59,24 @@ jobs:
           echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
       - name: Clone FlatData repositories
-        if: ${{ inputs.Unpack_FlatData }}
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
 
       - name: Setup FlatData
-        if: ${{ inputs.Unpack_FlatData }}
         run: |
           python setup_flatdata.py
 
-      - name: Downloads Table files
-        if: ${{ inputs.Unpack_FlatData }}
+      - name: Downloads Table files and run MemoryPackRepacker
         run: |
           chmod +x update.sh
-          ./update.sh
-
-      - name: Run MemoryPackRepacker
-        run: |
-          chmod +x ./MemoryPackRepacker
-          ./MemoryPackRepacker deserialize media ./downloads/MediaResources/Catalog/MediaCatalog.bytes MediaCatalog.json
-          ./MemoryPackRepacker deserialize table  ./downloads/TableBundles/TableCatalog.bytes TableCatalog.json
-          ./MemoryPackRepacker deserialize asset  ./downloads/Android_PatchPack/BundlePackingInfo.bytes BundlePackingInfo-Android.json
-          ./MemoryPackRepacker deserialize asset  ./downloads/iOS_PatchPack/BundlePackingInfo.bytes   BundlePackingInfo-iOS.json
+          ./update.sh JP Table
 
       - name: Unpack ExcelDB.db and Excel.zip
-        if: ${{ inputs.Unpack_FlatData }}
         run: |
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData config.json BA-Text 10
 
       - name: Committing FlatData
-        if: ${{ inputs.Unpack_FlatData }}
         run: |
           cd ./Extracted/FlatData/
           zip -j "FlatData${BA_VERSION_NAME}.zip" *
@@ -99,7 +87,6 @@ jobs:
           git push origin
 
       - name: Committing TableBundles
-        if: ${{ inputs.Unpack_FlatData }}
         run: |
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
@@ -112,25 +99,103 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
-      - name: Commit TableBundles
-        if: ${{ inputs.Unpack_FlatData }}
+      - name: Committing TableBundles
         shell: bash
         run: |
           set -e
 
-          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text/
-          cd BA-Text
+          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Assets/
+          mv "BA-Text/DBSchema" "BA-Assets/"
+          mv "BA-Text/ExcelTable" "BA-Assets/"
+          cd BA-Assets
 
-          for f in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
-              [ -e "$f" ] || continue
+          git pull origin main
 
-              if [ $(stat -c%s "$f") -gt 104857600 ]; then
-                echo "[$f] >100 MB, compressing to $f.gz"
-                gzip -c "$f" > "$f.gz"
-                git add "$f.gz"
-              else
-                git add "$f"
+          for item in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
+              if [ -e "$item" ]; then
+                  if [ -d "$item" ]; then
+                      echo "Processing directory: $item"
+                      find "$item" -type f | while read -r file; do
+                          file_size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+                          if [ "$file_size" -gt 104857600 ]; then
+                              echo "[$file] >100 MB ($((file_size/1048576)) MB), compressing to $file.gz"
+                              gzip -c "$file" > "$file.gz"
+                              rm "$file"
+                          fi
+                      done
+                  else
+                      file_size=$(stat -c%s "$item" 2>/dev/null || stat -f%z "$item")
+                      if [ "$file_size" -gt 104857600 ]; then
+                          echo "[$item] >100 MB ($((file_size/1048576)) MB), compressing to $item.gz"
+                          gzip -c "$item" > "$item.gz"
+                          rm "$item"
+                      fi
+                  fi
               fi
           done
+          git add .
+
+          git commit -m "Add version ${BA_VERSION_NAME}"
+          git push origin
+
+  Media:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.Downloads_Meida }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version
+        id: get-versions
+        run: bash version.sh info.json >> "$GITHUB_OUTPUT"
+
+      - name: Get version name
+        run: |
+          echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
+
+      - name: Downloads Media files
+        run: |
+          chmod +x update.sh
+          ./update.sh JP Media
+
+      - name: Clone BA-Assets repository for media
+        run: |
+          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git media-assets
+
+      - name: Process and commit Media files
+        shell: bash
+        run: |
+          set -e
+
+          git pull origin main
+
+          git add .
+
           git commit -m "Add version ${BA_VERSION_NAME}"
           git push origin
