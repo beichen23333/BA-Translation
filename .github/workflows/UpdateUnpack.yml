@@ -69,11 +69,11 @@ jobs:
 
       - name: Get version
         id: get-versions
+        run: bash version.sh ba.env >> "$GITHUB_OUTPUT"
+
+      - name: Get version name
         run: |
-          VERSION_INFO=$(bash version.sh info.json)
-          echo "$VERSION_INFO"
-          echo "$VERSION_INFO" >> $GITHUB_OUTPUT
-          echo "BA_VERSION_NAME=$(echo "$VERSION_INFO" | grep "BA_VERSION_NAME=" | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+          echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
   Table:
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ jobs:
 
       - name: Get version from setup job
         run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
       - name: Clone FlatData repositories
         run: |
@@ -135,19 +135,19 @@ jobs:
         run: |
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData config.json BA-Text 10
 
-      - name: Prepare FlatData
+      - name: Prepare FlatData (不提交)
         run: |
           cd ./Extracted/FlatData/
           zip -j "FlatData${BA_VERSION_NAME}.zip" *
           mv "FlatData${BA_VERSION_NAME}.zip" ../../BA-FlatData/
 
-      - name: Prepare Text files
+      - name: Prepare Text files (不提交)
         run: |
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json
 
-      - name: Prepare Assets files
+      - name: Prepare Assets files (不提交)
         run: |
           set -e
           TARGET_DIR="BA-Assets"
@@ -242,7 +242,7 @@ jobs:
 
       - name: Get version from setup job
         run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
       - name: Clone Assets repository for media
         run: |
@@ -296,7 +296,7 @@ jobs:
 
       - name: Get version from setup job
         run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
       - name: Clone Assets repository
         run: |
