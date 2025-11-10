@@ -67,6 +67,10 @@ jobs:
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
 
+      - name: Clone repositories
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
       - name: Setup FlatData
         run: |
           python setup_flatdata.py
@@ -99,10 +103,6 @@ jobs:
           git commit -m "Add version ${BA_VERSION_NAME}"
           git push origin
 
-      - name: Clone repositories
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Committing TableBundles to Assets
         shell: bash
         run: |
@@ -119,7 +119,7 @@ jobs:
             fi
           done
 
-          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "$TARGET_DIR$"
+          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "$TARGET_DIR"
           if [ -d "BA-Assets/DBSchema" ]; then
             rm -rf "BA-Assets/DBSchema"
           fi
@@ -201,14 +201,14 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
+      - name: Clone BA-Assets repository for media
+        run: |
+          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
       - name: Downloads Media files
         run: |
           chmod +x update.sh
           ./update.sh JP Media 8
-
-      - name: Clone BA-Assets repository for media
-        run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Process and commit Media files
         shell: bash
@@ -264,14 +264,14 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
-      - name: Downloads Media files
+      - name: Clone BA-Assets repository
+        run: |
+          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Downloads Bundle files
         run: |
           chmod +x update.sh
           ./update.sh JP Bundle 8
-
-      - name: Clone BA-Assets repository for media
-        run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Process and commit Bundle files
         shell: bash
