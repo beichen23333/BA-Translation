@@ -12,7 +12,11 @@ on:
         required: false
         type: boolean
         default: true
-
+      Extract_Bundle:
+        description: 'Extract Bundle?'
+        required: false
+        type: boolean
+        default: true
 permissions:
   contents: write
 
@@ -153,7 +157,7 @@ jobs:
           done
           git add .
 
-          git commit -m "Add version ${BA_VERSION_NAME}"
+          git commit -m "Add Table version ${BA_VERSION_NAME}"
           git push origin
 
   Media:
@@ -200,7 +204,7 @@ jobs:
       - name: Downloads Media files
         run: |
           chmod +x update.sh
-          ./update.sh JP Media
+          ./update.sh JP Media 8
 
       - name: Clone BA-Assets repository for media
         run: |
@@ -216,5 +220,68 @@ jobs:
 
           git add .
 
-          git commit -m "Add version ${BA_VERSION_NAME}"
+          git commit -m "Add Media version ${BA_VERSION_NAME}"
+          git push origin
+
+  Bundle:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.Extract_Bundle }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version
+        id: get-versions
+        run: bash version.sh info.json >> "$GITHUB_OUTPUT"
+
+      - name: Get version name
+        run: |
+          echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
+
+      - name: Downloads Media files
+        run: |
+          chmod +x update.sh
+          ./update.sh JP Bundle 8
+
+      - name: Clone BA-Assets repository for media
+        run: |
+          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Process and commit Bundle files
+        shell: bash
+        run: |
+          set -e
+          cd BA-Assets
+
+          git pull origin main
+
+          git add .
+
+          git commit -m "Add Bundle version ${BA_VERSION_NAME}"
           git push origin
