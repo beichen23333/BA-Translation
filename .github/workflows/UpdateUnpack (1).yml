@@ -147,6 +147,55 @@ jobs:
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable
 
+      - name: Prepare Assets files
+        run: |
+          set -e
+          TARGET_DIR="BA-Assets"
+
+          FILES=("TableCatalog.json" "MediaCatalog.json" "BundlePackingInfo-iOS.json" "BundlePackingInfo-Android.json")
+
+          for file in "${FILES[@]}"; do
+            if [ -f "$TARGET_DIR/$file" ]; then
+              echo "删除已存在的文件: $TARGET_DIR/$file"
+              rm "$TARGET_DIR/$file"
+            fi
+          done
+
+          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "$TARGET_DIR"
+          if [ -d "BA-Assets/DBSchema" ]; then
+            rm -rf "BA-Assets/DBSchema"
+          fi
+          mv "BA-Text/DBSchema" "BA-Assets/DBSchema"
+          if [ -d "BA-Assets/ExcelTable" ]; then
+            rm -rf "BA-Assets/ExcelTable"
+          fi
+          mv "BA-Text/ExcelTable" "BA-Assets/ExcelTable"
+
+          cd BA-Assets
+
+          for item in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
+              if [ -e "$item" ]; then
+                  if [ -d "$item" ]; then
+                      echo "Processing directory: $item"
+                      find "$item" -type f | while read -r file; do
+                          file_size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+                          if [ "$file_size" -gt 104857600 ]; then
+                              echo "[$file] >100 MB ($((file_size/1048576)) MB), compressing to $file.gz"
+                              gzip -c "$file" > "$file.gz"
+                              rm "$file"
+                          fi
+                      done
+                  else
+                      file_size=$(stat -c%s "$item" 2>/dev/null || stat -f%z "$item")
+                      if [ "$file_size" -gt 104857600 ]; then
+                          echo "[$item] >100 MB ($((file_size/1048576)) MB), compressing to $item.gz"
+                          gzip -c "$item" > "$item.gz"
+                          rm "$item"
+                      fi
+                  fi
+              fi
+          done
+
       - name: Upload Table artifacts
         uses: actions/upload-artifact@v4
         with:
