@@ -2,8 +2,8 @@
   "Table": {
     "ExcelDB.db": {
       "name": "ExcelDB.db",
-      "size": 166633472,
-      "crc": 2149316591,
+      "size": 145817600,
+      "crc": 2671808274,
       "is_inbuild": false,
       "is_changed": false,
       "is_prologue": true,
@@ -23,7 +23,7 @@
     "LevelSkillDataDBSchema.db": {
       "name": "LevelSkillDataDBSchema.db",
       "size": 17580032,
-      "crc": 868484544,
+      "crc": 4047564814,
       "is_inbuild": false,
       "is_changed": false,
       "is_prologue": true,
@@ -33,7 +33,7 @@
     "SkillVisualEffectDataDBSchema.db": {
       "name": "SkillVisualEffectDataDBSchema.db",
       "size": 7004160,
-      "crc": 3197197608,
+      "crc": 550930696,
       "is_inbuild": false,
       "is_changed": false,
       "is_prologue": true,
@@ -42,8 +42,8 @@
     },
     "Excel.zip": {
       "name": "Excel.zip",
-      "size": 16708664,
-      "crc": 3627189740,
+      "size": 16719462,
+      "crc": 979103311,
       "is_inbuild": false,
       "is_changed": false,
       "is_prologue": true,
