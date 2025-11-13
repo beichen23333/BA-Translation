@@ -456,7 +456,7 @@ jobs:
           file_types=("mp4" "jpg" "png" "ogg" "json" "zip")
           
           for file_type in "${file_types[@]}"; do
-            commit_batch "$file_type" "*.$file_type" "Update Assets: $file_type files - version ${{ needs.setup.outputs.version }}"
+            commit_batch "$file_type" "*.$file_type" "Update Assets: $file_type files - version ${{ needs.setup.outputs.version }}" || true
           done
           
           echo "Processing remaining files..."
@@ -479,6 +479,7 @@ jobs:
                 git commit -m "Update Assets: remaining files batch $batch_num - version ${{ needs.setup.outputs.version }}"
                 if ! push_with_retry; then
                   echo "Failed to push remaining files batch $batch_num"
+                  exit 1
                 fi
                 batch_num=$((batch_num + 1))
               fi
@@ -490,6 +491,7 @@ jobs:
             git commit -m "Update Assets: final batch of remaining files - version ${{ needs.setup.outputs.version }}"
             if ! push_with_retry; then
               echo "Failed to push final batch of remaining files"
+              exit 1
             fi
           fi
           
