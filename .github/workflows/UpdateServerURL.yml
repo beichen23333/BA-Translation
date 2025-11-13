@@ -61,4 +61,4 @@ jobs:
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d '{"event_type": "run-deployment", "client_payload": {"Translation": true}, "inputs": {"Unpack_FlatData": true, "Downloads_Meida": false, "Extract_Bundle": false}}'
+            -d '{"event_type": "run-deployment", "client_payload": {"Translation": true}}'

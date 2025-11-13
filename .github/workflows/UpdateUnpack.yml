@@ -113,13 +113,10 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone FlatData repositories
+      - name: Clone repositories
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
-
-      - name: Clone Assets repository
-        run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Setup FlatData
@@ -140,10 +137,10 @@ jobs:
           cd ./Extracted/FlatData/
           zip -j "FlatData${BA_VERSION_NAME}.zip" *
           mv "FlatData${BA_VERSION_NAME}.zip" ../../BA-FlatData/
+          cd
 
       - name: Prepare Text files
         run: |
-          cd
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable
