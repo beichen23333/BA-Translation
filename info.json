@@ -1,7 +1,7 @@
 {
     "JP": {
         "ServerInfoDataUrl": "https://yostar-serverinfo.bluearchiveyostar.com/r85_62_c4mbuxer0zy6w1exv3l0.json",
-        "AddressableCatalogUrl": "https://prod-clientpatch.bluearchiveyostar.com/r85_2uaxmy43nxdty1d70dro",
+        "AddressableCatalogUrl": "https://prod-clientpatch.bluearchiveyostar.com/r85_koip3m107nrk5f6vtc3b",
         "APKVersionCode": "378897",
         "APKVersionName": "1.62.378897",
         "DefaultConnectionGroup": "Prod-Audit",
@@ -26,10 +26,10 @@
                     },
                     {
                         "Name": "1.62",
-                        "AddressablesCatalogUrlRoot": "https://prod-clientpatch.bluearchiveyostar.com/r85_2uaxmy43nxdty1d70dro"
+                        "AddressablesCatalogUrlRoot": "https://prod-clientpatch.bluearchiveyostar.com/r85_koip3m107nrk5f6vtc3b"
                     }
                 ],
-                "BundleVersion": "qtmrfsa5k8",
+                "BundleVersion": "54jt0q7o8z",
                 "IsLivePublished": true
             }
         ]

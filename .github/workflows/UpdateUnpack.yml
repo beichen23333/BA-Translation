@@ -120,7 +120,7 @@ jobs:
 
       - name: Clone Assets repository
         run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Setup FlatData
         run: |
@@ -143,9 +143,60 @@ jobs:
 
       - name: Prepare Text files
         run: |
+          cd
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable
+
+      - name: Prepare Assets files
+        run: |
+          set -e
+          cd
+          TARGET_DIR="BA-Assets"
+
+          FILES=("TableCatalog.json" "MediaCatalog.json" "BundlePackingInfo-iOS.json" "BundlePackingInfo-Android.json")
+
+          for file in "${FILES[@]}"; do
+            if [ -f "$TARGET_DIR/$file" ]; then
+              echo "删除已存在的文件: $TARGET_DIR/$file"
+              rm "$TARGET_DIR/$file"
+            fi
+          done
+
+          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "$TARGET_DIR"
+          if [ -d "BA-Assets/DBSchema" ]; then
+            rm -rf "BA-Assets/DBSchema"
+          fi
+          mv "BA-Text/DBSchema" "BA-Assets/DBSchema"
+          if [ -d "BA-Assets/ExcelTable" ]; then
+            rm -rf "BA-Assets/ExcelTable"
+          fi
+          mv "BA-Text/ExcelTable" "BA-Assets/ExcelTable"
+
+          cd BA-Assets
+
+          for item in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
+              if [ -e "$item" ]; then
+                  if [ -d "$item" ]; then
+                      echo "Processing directory: $item"
+                      find "$item" -type f | while read -r file; do
+                          file_size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+                          if [ "$file_size" -gt 104857600 ]; then
+                              echo "[$file] >100 MB ($((file_size/1048576)) MB), compressing to $file.gz"
+                              gzip -c "$file" > "$file.gz"
+                              rm "$file"
+                          fi
+                      done
+                  else
+                      file_size=$(stat -c%s "$item" 2>/dev/null || stat -f%z "$item")
+                      if [ "$file_size" -gt 104857600 ]; then
+                          echo "[$item] >100 MB ($((file_size/1048576)) MB), compressing to $item.gz"
+                          gzip -c "$item" > "$item.gz"
+                          rm "$item"
+                      fi
+                  fi
+              fi
+          done
 
       - name: Upload Table artifacts
         uses: actions/upload-artifact@v4
@@ -197,7 +248,7 @@ jobs:
 
       - name: Clone Assets repository for media
         run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Downloads Media files
         run: |
@@ -251,7 +302,7 @@ jobs:
 
       - name: Clone Assets repository
         run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Downloads Bundle files
         run: |
@@ -272,9 +323,9 @@ jobs:
     steps:
       - name: Checkout target repositories
         run: |
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
-          git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -338,15 +389,73 @@ jobs:
             git commit -m "Update Text version ${{ needs.setup.outputs.version }}" && git push origin
           fi
 
-      - name: Commit to BA-Assets
+      - name: Batch commit BA-Assets by file type
         run: |
           cd BA-Assets
-          git add .
-          if git diff --staged --quiet; then
-            echo "No changes in BA-Assets"
-          else
-            git commit -m "Batch update version ${{ needs.setup.outputs.version }} (Table:${{ inputs.Unpack_FlatData }} Media:${{ inputs.Downloads_Meida }} Bundle:${{ inputs.Extract_Bundle }})" && git push origin
+          
+          # 提交 mp4 文件
+          echo "Committing mp4 files..."
+          find . -name "*.mp4" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
           fi
+  
+          # 提交 jpg 文件
+          echo "Committing jpg files..."
+          find . -name "*.jpg" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: jpg files - version ${{ needs.setup.outputs.version }}"
+          fi        
+
+          # 提交 ogg 文件
+          echo "Committing ogg files..."
+          find . -name "*.ogg" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          # 提交 json 文件
+          echo "Committing json files..."
+          find . -name "*.json" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          # 提交 zip 文件
+          echo "Committing zip files..."
+          find . -name "*.zip" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          echo "Committing remaining files in batches..."
+          batch_num=1
+          find . -type f | grep -vE '\.(mp4|ogg|json|zip)$' | while read file; do
+            git add "$file"
+            # 每1000个文件提交一次
+            if [ $((batch_num % 1000)) -eq 0 ]; then
+              if ! git diff --staged --quiet; then
+                git commit -m "Update Assets: remaining files batch $((batch_num/1000)) - version ${{ needs.setup.outputs.version }}"
+              fi
+            fi
+            ((batch_num++))
+          done
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: final batch of remaining files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          git push origin
 
       - name: Trigger next workflow for Media and Bundle
         if: needs.setup.outputs.trigger-type == 'repository_dispatch' && needs.Table.result == 'success'
