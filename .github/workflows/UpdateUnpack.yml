@@ -121,10 +121,6 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
 
-      - name: Clone BA-Assets
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Setup FlatData
         run: |
           python setup_flatdata.py
@@ -150,23 +146,21 @@ jobs:
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
           zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable
+          cd
 
       - name: Prepare Assets files
         run: |
-          set -e
-          cd
-          TARGET_DIR="BA-Assets"
-
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
           FILES=("TableCatalog.json" "MediaCatalog.json" "BundlePackingInfo-iOS.json" "BundlePackingInfo-Android.json")
 
           for file in "${FILES[@]}"; do
-            if [ -f "$TARGET_DIR/$file" ]; then
-              echo "删除已存在的文件: $TARGET_DIR/$file"
-              rm "$TARGET_DIR/$file"
+            if [ -f "BA-Assets/$file" ]; then
+              echo "删除已存在的文件: BA-Assets/$file"
+              rm "BA-Assets/$file"
             fi
           done
 
-          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "$TARGET_DIR"
+          cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} "BA-Assets"
           if [ -d "BA-Assets/DBSchema" ]; then
             rm -rf "BA-Assets/DBSchema"
           fi
@@ -485,7 +479,6 @@ jobs:
                 git commit -m "Update Assets: remaining files batch $batch_num - version ${{ needs.setup.outputs.version }}"
                 if ! push_with_retry; then
                   echo "Failed to push remaining files batch $batch_num"
-                  exit 1
                 fi
                 batch_num=$((batch_num + 1))
               fi
@@ -497,7 +490,6 @@ jobs:
             git commit -m "Update Assets: final batch of remaining files - version ${{ needs.setup.outputs.version }}"
             if ! push_with_retry; then
               echo "Failed to push final batch of remaining files"
-              exit 1
             fi
           fi
           
