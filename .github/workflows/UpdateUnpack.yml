@@ -108,28 +108,13 @@ jobs:
 
       - name: Get Bundle packs list
         id: get-bundle-packs
+        env:
+          DEFAULT_BUNDLE_PACKS: ${{ secrets.DEFAULT_BUNDLE_PACKS || 'FullPatch_100.zip,FullPatch_101.zip|FullPatch_102.zip,FullPatch_103.zip' }}
         run: |
           chmod +x update.sh
           ./update.sh JP Bundle 1 catalog-only
-          python -c "
-          import json
-          try:
-              with open('BundlePackingInfo-Android.json', 'r', encoding='utf-8') as f:
-                  data = json.load(f)
-              full_packs = data.get('FullPatchPacks', [])
-              update_packs = data.get('UpdatePacks', [])
-              all_packs = [pack['PackName'] for pack in full_packs + update_packs if pack.get('PackName')]
-              import math
-              group_size = math.ceil(len(all_packs) / 4)
-              groups = [all_packs[i:i+group_size] for i in range(0, len(all_packs), group_size)]
-              groups_str = '|'.join([','.join(group) for group in groups])
-              print(f'bundle-packs={groups_str}' >> '$GITHUB_OUTPUT')
-              print(f'Found {len(all_packs)} bundle packs, split into {len(groups)} groups')
-          except Exception as e:
-              print(f'Error: {e}')
-              default_packs = 'FullPatch_100.zip,FullPatch_101.zip|FullPatch_102.zip,FullPatch_103.zip'
-              echo 'bundle-packs=${{ secrets.DEFAULT_BUNDLE_PACKS || default_packs }}' >> '$GITHUB_OUTPUT'
-          "
+          python get_bundle_packs.py >> "$GITHUB_OUTPUT"
+
 
   bundle-group-1:
     runs-on: ubuntu-latest
