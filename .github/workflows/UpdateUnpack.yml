@@ -75,6 +75,302 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
+  bundle-setup:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: ${{ inputs.Extract_Bundle }}
+    outputs:
+      bundle-packs: ${{ steps.get-bundle-packs.outputs.bundle-packs }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Get Bundle packs list
+        id: get-bundle-packs
+        run: |
+          chmod +x update.sh
+          ./update.sh JP Bundle 1 catalog-only
+          python -c "
+          import json
+          try:
+              with open('BundlePackingInfo-Android.json', 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+              full_packs = data.get('FullPatchPacks', [])
+              update_packs = data.get('UpdatePacks', [])
+              all_packs = [pack['PackName'] for pack in full_packs + update_packs if pack.get('PackName')]
+              import math
+              group_size = math.ceil(len(all_packs) / 4)
+              groups = [all_packs[i:i+group_size] for i in range(0, len(all_packs), group_size)]
+              groups_str = '|'.join([','.join(group) for group in groups])
+              print(f'bundle-packs={groups_str}' >> '$GITHUB_OUTPUT')
+              print(f'Found {len(all_packs)} bundle packs, split into {len(groups)} groups')
+          except Exception as e:
+              print(f'Error: {e}')
+              default_packs = 'FullPatch_100.zip,FullPatch_101.zip|FullPatch_102.zip,FullPatch_103.zip'
+              echo 'bundle-packs=${{ secrets.DEFAULT_BUNDLE_PACKS || default_packs }}' >> '$GITHUB_OUTPUT'
+          "
+
+  bundle-group-1:
+    runs-on: ubuntu-latest
+    needs: [setup, bundle-setup]
+    if: ${{ inputs.Extract_Bundle }}
+    strategy:
+      matrix:
+        group: [1]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version from setup job
+        run: |
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Clone Assets repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Extract bundle group 1
+        run: |
+          chmod +x update.sh
+          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
+          GROUP1_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f1)
+          echo "Processing bundle group 1: $GROUP1_PACKS"
+          ./update.sh JP Bundle 8 "$GROUP1_PACKS"
+
+      - name: Upload Bundle artifacts group 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-changes-group-1
+          path: BA-Assets/
+          retention-days: 1
+
+  bundle-group-2:
+    runs-on: ubuntu-latest
+    needs: [setup, bundle-setup]
+    if: ${{ inputs.Extract_Bundle }}
+    strategy:
+      matrix:
+        group: [2]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version from setup job
+        run: |
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Clone Assets repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Extract bundle group 2
+        run: |
+          chmod +x update.sh
+          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
+          GROUP2_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f2)
+          echo "Processing bundle group 2: $GROUP2_PACKS"
+          ./update.sh JP Bundle 8 "$GROUP2_PACKS"
+
+      - name: Upload Bundle artifacts group 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-changes-group-2
+          path: BA-Assets/
+          retention-days: 1
+
+  bundle-group-3:
+    runs-on: ubuntu-latest
+    needs: [setup, bundle-setup]
+    if: ${{ inputs.Extract_Bundle }}
+    strategy:
+      matrix:
+        group: [3]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version from setup job
+        run: |
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Clone Assets repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Extract bundle group 3
+        run: |
+          chmod +x update.sh
+          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
+          GROUP3_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f3)
+          echo "Processing bundle group 3: $GROUP3_PACKS"
+          ./update.sh JP Bundle 8 "$GROUP3_PACKS"
+
+      - name: Upload Bundle artifacts group 3
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-changes-group-3
+          path: BA-Assets/
+          retention-days: 1
+
+  bundle-group-4:
+    runs-on: ubuntu-latest
+    needs: [setup, bundle-setup]
+    if: ${{ inputs.Extract_Bundle }}
+    strategy:
+      matrix:
+        group: [4]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Get version from setup job
+        run: |
+          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Clone Assets repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
+
+      - name: Extract bundle group 4
+        run: |
+          chmod +x update.sh
+          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
+          GROUP4_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f4)
+          echo "Processing bundle group 4: $GROUP4_PACKS"
+          ./update.sh JP Bundle 8 "$GROUP4_PACKS"
+
+      - name: Upload Bundle artifacts group 4
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-changes-group-4
+          path: BA-Assets/
+          retention-days: 1
+
   Table:
     runs-on: ubuntu-latest
     needs: setup
@@ -259,63 +555,9 @@ jobs:
           path: BA-Assets/
           retention-days: 1
 
-  Bundle:
-    runs-on: ubuntu-latest
-    needs: setup
-    if: ${{ inputs.Extract_Bundle }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
-      - name: Downloads Bundle files
-        run: |
-          chmod +x update.sh
-          ./update.sh JP Bundle 8
-
-      - name: Upload Bundle artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-changes
-          path: BA-Assets/
-          retention-days: 1
-
   final-commit:
     runs-on: ubuntu-latest
-    needs: [Table, Media, Bundle]
+    needs: [Table, Media, bundle-group-1, bundle-group-2, bundle-group-3, bundle-group-4]
     if: always() && (contains(needs.*.result, 'success') || contains(needs.*.result, 'skipped'))
     steps:
       - name: Clone BA-FlatData
@@ -344,18 +586,9 @@ jobs:
         if: needs.Table.result == 'success'
         run: |
           if [ -d "artifacts/table-changes" ]; then
-            # 应用FlatData变更
-            if [ -d "artifacts/table-changes/BA-FlatData" ]; then
-              cp -r artifacts/table-changes/BA-FlatData/* BA-FlatData/ || true
-            fi
-            # 应用Text变更
-            if [ -d "artifacts/table-changes/BA-Text" ]; then
-              cp -r artifacts/table-changes/BA-Text/* BA-Text/ || true
-            fi
-            # 应用Assets变更
-            if [ -d "artifacts/table-changes/BA-Assets" ]; then
-              cp -r artifacts/table-changes/BA-Assets/* BA-Assets/ || true
-            fi
+            cp -r artifacts/table-changes/BA-FlatData/* BA-FlatData/ || true
+            cp -r artifacts/table-changes/BA-Text/* BA-Text/ || true
+            cp -r artifacts/table-changes/BA-Assets/* BA-Assets/ || true
           fi
 
       - name: Apply Media changes
@@ -366,11 +599,13 @@ jobs:
           fi
 
       - name: Apply Bundle changes
-        if: needs.Bundle.result == 'success'
         run: |
-          if [ -d "artifacts/bundle-changes" ]; then
-            cp -r artifacts/bundle-changes/* BA-Assets/ || true
-          fi
+          for i in 1 2 3 4; do
+            if [ -d "artifacts/bundle-changes-group-$i" ]; then
+              echo "Applying bundle changes from group $i"
+              cp -r artifacts/bundle-changes-group-$i/* BA-Assets/ || true
+            fi
+          done
 
       - name: Commit to BA-FlatData
         run: |
