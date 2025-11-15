@@ -706,9 +706,64 @@ jobs:
         run: |
           echo "开始提交到 BA-Assets，版本: $BA_VERSION_NAME"
           cd BA-Assets
-          chmod +x ../commit.sh
-          ../commit.sh
-          cd ..
+          
+          echo "Committing mp4 files..."
+          find . -name "*.mp4" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
+          fi
+  
+          echo "Committing jpg files..."
+          find . -name "*.jpg" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: jpg files - version ${{ needs.setup.outputs.version }}"
+          fi        
+
+          echo "Committing ogg files..."
+          find . -name "*.ogg" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          echo "Committing json files..."
+          find . -name "*.json" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          echo "Committing zip files..."
+          find . -name "*.zip" -type f | head -1000 | while read file; do
+            git add "$file"
+          done
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          echo "Committing remaining files in batches..."
+          batch_num=1
+          find . -type f | grep -vE '\.(mp4|ogg|json|zip)$' | while read file; do
+            git add "$file"
+            if [ $((batch_num % 1000)) -eq 0 ]; then
+              if ! git diff --staged --quiet; then
+                git commit -m "Update Assets: remaining files batch $((batch_num/1000)) - version ${{ needs.setup.outputs.version }}"
+              fi
+            fi
+            ((batch_num++))
+          done
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Assets: final batch of remaining files - version ${{ needs.setup.outputs.version }}"
+          fi
+          
+          git push origin
 
       - name: Cleanup
         run: |
