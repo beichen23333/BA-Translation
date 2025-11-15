@@ -1,7 +1,4 @@
-#!/bin/bash
 set -euo pipefail
-
-cd BA-Assets
 
 smart_commit() {
   local file_type=$1

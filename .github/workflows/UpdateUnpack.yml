@@ -612,6 +612,10 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
+      - name: Clone BA-Assets-Bundle repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets-Bundle.git
+
       - name: Download Table artifacts
         if: needs.Table.result == 'success'
         uses: actions/download-artifact@v4
@@ -657,9 +661,18 @@ jobs:
           retry-count: 5
           retry-delay: 30000
 
-      - name: Extract and merge artifacts
+      - name: Download Bundle group 4 artifacts
+        if: needs.bundle-group-4.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-zip-group-4
+          path: artifacts/bundle-zips/group-4
+          retry-count: 5
+          retry-delay: 30000
+
+      - name: Extract and merge Table and Media to BA-Assets
         run: |
-          echo "解压并合并artifacts到BA-Assets..."
+          echo "解压并合并Table和Media到BA-Assets..."
           
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
             echo "合并table changes..."
@@ -676,16 +689,22 @@ jobs:
             echo "没有Media内容可合并"
           fi
           
-          for group in 1 2 3; do
-            if [ -f "artifacts/bundle-zips/group-$group.zip" ]; then
+          echo "Table和Media合并完成"
+
+      - name: Extract and merge Bundle to BA-Assets-Bundle
+        run: |
+          echo "解压并合并Bundle到BA-Assets-Bundle..."
+          
+          for group in 1 2 3 4; do
+            if [ -f "artifacts/bundle-zips/group-$group/bundle_extracted_content_group$group.zip" ]; then
               echo "解压bundle group $group ZIP包..."
-              unzip -q -o "artifacts/bundle-zips/group-$group.zip" -d BA-Assets/
-            elif [ -f "artifacts/bundle-zips/group-$group.empty" ]; then
+              unzip -q -o "artifacts/bundle-zips/group-$group/bundle_extracted_content_group$group.zip" -d BA-Assets-Bundle/
+            elif [ -f "artifacts/bundle-zips/group-$group/empty_bundle_group$group.zip" ]; then
               echo "没有bundle group $group的内容可合并"
             fi
           done
           
-          echo "合并完成"
+          echo "Bundle合并完成"
 
       - name: Configure git
         run: |
@@ -693,11 +712,24 @@ jobs:
           git config --global user.name "GitHub Actions"
 
       - name: Smart commit to BA-Assets
+        if: needs.Table.result == 'success' || needs.Media.result == 'success'
         env:
           BA_VERSION_NAME: ${{ needs.setup.outputs.version }}
         run: |
-          chmod +x commit.sh
-          ./commit.sh
+          cd BA-Assets
+          chmod +x ../commit.sh
+          ../commit.sh
+          cd ..
+
+      - name: Smart commit to BA-Assets-Bundle
+        if: contains(needs.*.result, 'success') && (needs.bundle-group-1.result == 'success' || needs.bundle-group-2.result == 'success' || needs.bundle-group-3.result == 'success' || needs.bundle-group-4.result == 'success')
+        env:
+          BA_VERSION_NAME: ${{ needs.setup.outputs.version }}
+        run: |
+          cd BA-Assets-Bundle
+          chmod +x ../commit.sh
+          ../commit.sh
+          cd ..
 
       - name: Cleanup
         run: |
