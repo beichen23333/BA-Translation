@@ -625,33 +625,46 @@ jobs:
           retry-count: 5
           retry-delay: 30000
 
-      - name: Download Bundle zip artifacts
-        if: always()
-        run: |
-          mkdir -p artifacts/bundle-zips
-          for group in 1 2 3 4; do
-            if [ "${{ needs.bundle-group-$group.result }}" == "success" ]; then
-              echo "Downloading bundle zip for group $group"
-              if curl -f -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -H "Accept: application/vnd.github.v3+json" \
-                 -o "artifacts/bundle-zips/group-$group.zip" \
-                 "https://api.github.com/repos/${{ github.repository }}/actions/artifacts?name=bundle-zip-group-$group&per_page=1"; then
-                echo "下载bundle group $group ZIP包成功"
-              else
-                echo "没有bundle group $group的ZIP包"
-                touch artifacts/bundle-zips/group-$group.empty
-              fi
-            else
-              echo "Bundle group $group skipped or failed"
-              touch artifacts/bundle-zips/group-$group.empty
-            fi
-          done
+      - name: Download Bundle group 1 artifacts
+        if: needs.bundle-group-1.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-zip-group-1
+          path: artifacts/bundle-zips/group-1
+          retry-count: 5
+          retry-delay: 30000
+
+      - name: Download Bundle group 2 artifacts
+        if: needs.bundle-group-2.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-zip-group-2
+          path: artifacts/bundle-zips/group-2
+          retry-count: 5
+          retry-delay: 30000
+
+      - name: Download Bundle group 3 artifacts
+        if: needs.bundle-group-3.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-zip-group-3
+          path: artifacts/bundle-zips/group-3
+          retry-count: 5
+          retry-delay: 30000
+
+      - name: Download Bundle group 4 artifacts
+        if: needs.bundle-group-4.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundle-zip-group-4
+          path: artifacts/bundle-zips/group-4
+          retry-count: 5
+          retry-delay: 30000
 
       - name: Extract and merge artifacts
         run: |
           echo "解压并合并artifacts到BA-Assets..."
           
-          # 处理Table artifacts
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
             echo "合并table changes..."
             if [ -d "artifacts/table-changes/BA-Assets" ]; then
@@ -659,7 +672,6 @@ jobs:
             fi
           fi
           
-          # 处理Media ZIP包
           if [ -f "artifacts/media-zip/media_extracted_content.zip" ]; then
             echo "解压Media ZIP包..."
             unzip -q -o artifacts/media-zip/media_extracted_content.zip -d BA-Assets/
@@ -668,7 +680,6 @@ jobs:
             echo "没有Media内容可合并"
           fi
           
-          # 处理Bundle ZIP包
           for group in 1 2 3 4; do
             if [ -f "artifacts/bundle-zips/group-$group.zip" ]; then
               echo "解压bundle group $group ZIP包..."
