@@ -657,15 +657,6 @@ jobs:
           retry-count: 5
           retry-delay: 30000
 
-      - name: Download Bundle group 4 artifacts
-        if: needs.bundle-group-4.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-zip-group-4
-          path: artifacts/bundle-zips/group-4
-          retry-count: 5
-          retry-delay: 30000
-
       - name: Extract and merge artifacts
         run: |
           echo "解压并合并artifacts到BA-Assets..."
@@ -685,7 +676,7 @@ jobs:
             echo "没有Media内容可合并"
           fi
           
-          for group in 1 2 3 4; do
+          for group in 1 2 3; do
             if [ -f "artifacts/bundle-zips/group-$group.zip" ]; then
               echo "解压bundle group $group ZIP包..."
               unzip -q -o "artifacts/bundle-zips/group-$group.zip" -d BA-Assets/
