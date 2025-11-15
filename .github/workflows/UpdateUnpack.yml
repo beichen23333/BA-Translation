@@ -656,12 +656,17 @@ jobs:
             local file_type=$1
             local pattern=$2
             local commit_msg=$3
-            local batch_size=200  # 减小批量大小，避免内存问题
+            local batch_size=200
             local batch_num=1
             
             echo "Processing $file_type files..."
             
-            # 使用更安全的方式处理文件路径
+            # 检查是否有匹配的文件
+            if ! find . -name "$pattern" -type f | grep -q .; then
+              echo "No $file_type files found, skipping..."
+              return 0
+            fi
+            
             local file_count=0
             local current_batch=()
             
@@ -701,13 +706,14 @@ jobs:
                     fi
                   else
                     echo "No changes to commit in batch $batch_num"
+                    current_batch=()
                   fi
                   
                   batch_num=$((batch_num + 1))
                   current_batch=()
                 fi
               fi
-            done < <(find . -name "$pattern" -type f -print0)
+            done < <(find . -name "$pattern" -type f -print0 2>/dev/null)
             
             # 处理剩余文件
             if [ ${#current_batch[@]} -gt 0 ]; then
@@ -730,6 +736,8 @@ jobs:
                   echo "✗ Failed to commit final batch"
                   git reset
                 fi
+              else
+                echo "No changes to commit in final batch"
               fi
             fi
             
@@ -738,6 +746,13 @@ jobs:
           
           # 按文件类型顺序处理
           echo "Starting smart commit process..."
+          
+          # 先检查是否有任何变更
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "No changes detected in BA-Assets, skipping commit process"
+            cd ..
+            exit 0
+          fi
           
           # 先处理小文件，最后处理大文件
           smart_commit "json" "*.json" "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
@@ -752,7 +767,7 @@ jobs:
           other_files=()
           while IFS= read -r -d '' file; do
             other_files+=("$file")
-          done < <(find . -type f ! -name "*.json" ! -name "*.zip" ! -name "*.png" ! -name "*.jpg" ! -name "*.ogg" ! -name "*.mp4" -print0)
+          done < <(find . -type f ! -name "*.json" ! -name "*.zip" ! -name "*.png" ! -name "*.jpg" ! -name "*.ogg" ! -name "*.mp4" -print0 2>/dev/null)
           
           if [ ${#other_files[@]} -gt 0 ]; then
             echo "Found ${#other_files[@]} other files"
@@ -769,13 +784,16 @@ jobs:
                 done
                 
                 if ! git diff --staged --quiet; then
-                  git commit -m "Update Assets: other files batch $batch_num - version ${{ needs.setup.outputs.version }}"
-                  if git push origin; then
-                    echo "✓ Pushed other files batch $batch_num"
-                  else
-                    echo "✗ Failed to push other files batch $batch_num"
-                    git reset --hard HEAD~1
+                  if git commit -m "Update Assets: other files batch $batch_num - version ${{ needs.setup.outputs.version }}"; then
+                    if git push origin; then
+                      echo "✓ Pushed other files batch $batch_num"
+                    else
+                      echo "✗ Failed to push other files batch $batch_num"
+                      git reset --hard HEAD~1
+                    fi
                   fi
+                else
+                  echo "No changes to commit in other files batch $batch_num"
                 fi
                 
                 batch_num=$((batch_num + 1))
@@ -792,12 +810,15 @@ jobs:
               if ! git diff --staged --quiet; then
                 git commit -m "Update Assets: final other files - version ${{ needs.setup.outputs.version }}"
                 git push origin
+              else
+                echo "No changes to commit in final other files batch"
               fi
             fi
+          else
+            echo "No other files found"
           fi
           
           echo "Smart commit process completed"
-
 
       - name: Cleanup
         run: |
