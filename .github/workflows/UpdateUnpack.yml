@@ -109,7 +109,7 @@ jobs:
       - name: Get Bundle packs list
         id: get-bundle-packs
         env:
-          DEFAULT_BUNDLE_PACKS: ${{ secrets.DEFAULT_BUNDLE_PACKS || 'FullPatch_100.zip,FullPatch_101.zip|FullPatch_102.zip,FullPatch_103.zip|FullPatch_104.zip,FullPatch_105.zip|FullPatch_106.zip,FullPatch_107.zip|FullPatch_108.zip,FullPatch_109.zip|FullPatch_110.zip,FullPatch_111.zip|FullPatch_112.zip,FullPatch_113.zip|FullPatch_114.zip,FullPatch_115.zip' }}
+          DEFAULT_BUNDLE_PACKS: ${{ secrets.DEFAULT_BUNDLE_PACKS || 'FullPatch_100.zip,FullPatch_101.zip,FullPatch_102.zip,FullPatch_103.zip|FullPatch_104.zip,FullPatch_105.zip,FullPatch_106.zip,FullPatch_107.zip|FullPatch_108.zip,FullPatch_109.zip,FullPatch_110.zip,FullPatch_111.zip|FullPatch_112.zip,FullPatch_113.zip,FullPatch_114.zip,FullPatch_115.zip' }}
         run: |
           chmod +x update.sh
           ./update.sh JP Bundle 1 catalog-only
@@ -153,10 +153,6 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Extract bundle group 1
         run: |
           chmod +x update.sh
@@ -169,11 +165,26 @@ jobs:
             echo "No packs in group 1, skipping"
           fi
 
-      - name: Upload Bundle artifacts group 1
+      - name: Create bundle zip package
+        run: |
+          echo "创建bundle提取内容的ZIP包..."
+          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
+            cd ./bundle_output
+            zip -r "../bundle_extracted_content_group1.zip" .
+            cd ..
+            echo "已创建bundle_extracted_content_group1.zip"
+          else
+            echo "没有bundle提取内容可打包"
+            touch empty_bundle_group1.zip
+          fi
+
+      - name: Upload Bundle zip artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-changes-group-1
-          path: BA-Assets/
+          name: bundle-zip-group-1
+          path: |
+            bundle_extracted_content_group1.zip
+            empty_bundle_group1.zip
           retention-days: 1
 
   bundle-group-2:
@@ -214,10 +225,6 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Extract bundle group 2
         run: |
           chmod +x update.sh
@@ -230,11 +237,26 @@ jobs:
             echo "No packs in group 2, skipping"
           fi
 
-      - name: Upload Bundle artifacts group 2
+      - name: Create bundle zip package
+        run: |
+          echo "创建bundle提取内容的ZIP包..."
+          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
+            cd ./bundle_output
+            zip -r "../bundle_extracted_content_group2.zip" .
+            cd ..
+            echo "已创建bundle_extracted_content_group2.zip"
+          else
+            echo "没有bundle提取内容可打包"
+            touch empty_bundle_group2.zip
+          fi
+
+      - name: Upload Bundle zip artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-changes-group-2
-          path: BA-Assets/
+          name: bundle-zip-group-2
+          path: |
+            bundle_extracted_content_group2.zip
+            empty_bundle_group2.zip
           retention-days: 1
 
   bundle-group-3:
@@ -275,10 +297,6 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Extract bundle group 3
         run: |
           chmod +x update.sh
@@ -291,11 +309,26 @@ jobs:
             echo "No packs in group 3, skipping"
           fi
 
-      - name: Upload Bundle artifacts group 3
+      - name: Create bundle zip package
+        run: |
+          echo "创建bundle提取内容的ZIP包..."
+          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
+            cd ./bundle_output
+            zip -r "../bundle_extracted_content_group3.zip" .
+            cd ..
+            echo "已创建bundle_extracted_content_group3.zip"
+          else
+            echo "没有bundle提取内容可打包"
+            touch empty_bundle_group3.zip
+          fi
+
+      - name: Upload Bundle zip artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-changes-group-3
-          path: BA-Assets/
+          name: bundle-zip-group-3
+          path: |
+            bundle_extracted_content_group3.zip
+            empty_bundle_group3.zip
           retention-days: 1
 
   bundle-group-4:
@@ -336,10 +369,6 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Extract bundle group 4
         run: |
           chmod +x update.sh
@@ -352,255 +381,26 @@ jobs:
             echo "No packs in group 4, skipping"
           fi
 
-      - name: Upload Bundle artifacts group 4
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-changes-group-4
-          path: BA-Assets/
-          retention-days: 1
-
-  bundle-group-5:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ inputs.Extract_Bundle }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
+      - name: Create bundle zip package
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
-      - name: Extract bundle group 5
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP5_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f5)
-          echo "Processing bundle group 5: $GROUP5_PACKS"
-          if [ -n "$GROUP5_PACKS" ] && [ "$GROUP5_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP5_PACKS"
+          echo "创建bundle提取内容的ZIP包..."
+          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
+            cd ./bundle_output
+            zip -r "../bundle_extracted_content_group4.zip" .
+            cd ..
+            echo "已创建bundle_extracted_content_group4.zip"
           else
-            echo "No packs in group 5, skipping"
+            echo "没有bundle提取内容可打包"
+            touch empty_bundle_group4.zip
           fi
 
-      - name: Upload Bundle artifacts group 5
+      - name: Upload Bundle zip artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-changes-group-5
-          path: BA-Assets/
-          retention-days: 1
-
-  bundle-group-6:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ inputs.Extract_Bundle }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
-      - name: Extract bundle group 6
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP6_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f6)
-          echo "Processing bundle group 6: $GROUP6_PACKS"
-          if [ -n "$GROUP6_PACKS" ] && [ "$GROUP6_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP6_PACKS"
-          else
-            echo "No packs in group 6, skipping"
-          fi
-
-      - name: Upload Bundle artifacts group 6
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-changes-group-6
-          path: BA-Assets/
-          retention-days: 1
-
-  bundle-group-7:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ inputs.Extract_Bundle }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
-      - name: Extract bundle group 7
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP7_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f7)
-          echo "Processing bundle group 7: $GROUP7_PACKS"
-          if [ -n "$GROUP7_PACKS" ] && [ "$GROUP7_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP7_PACKS"
-          else
-            echo "No packs in group 7, skipping"
-          fi
-
-      - name: Upload Bundle artifacts group 7
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-changes-group-7
-          path: BA-Assets/
-          retention-days: 1
-
-  bundle-group-8:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ inputs.Extract_Bundle }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
-      - name: Extract bundle group 8
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP8_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f8)
-          echo "Processing bundle group 8: $GROUP8_PACKS"
-          if [ -n "$GROUP8_PACKS" ] && [ "$GROUP8_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP8_PACKS"
-          else
-            echo "No packs in group 8, skipping"
-          fi
-
-      - name: Upload Bundle artifacts group 8
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-changes-group-8
-          path: BA-Assets/
+          name: bundle-zip-group-4
+          path: |
+            bundle_extracted_content_group4.zip
+            empty_bundle_group4.zip
           retention-days: 1
 
   Table:
@@ -771,25 +571,36 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
 
-      - name: Clone Assets repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
-
       - name: Downloads Media files
         run: |
           chmod +x update.sh
           ./update.sh JP Media 8
 
-      - name: Upload Media artifacts
+      - name: Create media zip package
+        run: |
+          echo "创建Media文件的ZIP包..."
+          if [ -d "./media_temp" ] && [ "$(ls -A ./media_temp 2>/dev/null)" ]; then
+            cd ./media_temp
+            zip -r "../media_extracted_content.zip" .
+            cd ..
+            echo "已创建media_extracted_content.zip"
+          else
+            echo "没有Media文件可打包"
+            touch empty_media.zip
+          fi
+
+      - name: Upload Media zip artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: media-changes
-          path: BA-Assets/
+          name: media-zip
+          path: |
+            media_extracted_content.zip
+            empty_media.zip
           retention-days: 1
 
   final-commit:
     runs-on: ubuntu-latest
-    needs: [Table, Media, bundle-group-1, bundle-group-2, bundle-group-3, bundle-group-4, bundle-group-5, bundle-group-6, bundle-group-7, bundle-group-8]
+    needs: [Table, Media, bundle-group-1, bundle-group-2, bundle-group-3, bundle-group-4]
     if: always() && (contains(needs.*.result, 'success') || contains(needs.*.result, 'skipped'))
     steps:
       - name: Clone BA-Assets repository
@@ -805,97 +616,42 @@ jobs:
           retry-count: 5
           retry-delay: 30000
 
-      - name: Download Media artifacts
+      - name: Download Media zip artifacts
         if: needs.Media.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          name: media-changes
-          path: artifacts/media-changes
+          name: media-zip
+          path: artifacts/media-zip
           retry-count: 5
           retry-delay: 30000
 
-      - name: Download Bundle artifacts group 1
-        if: needs.bundle-group-1.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-1
-          path: artifacts/bundle-changes-group-1
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 2
-        if: needs.bundle-group-2.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-2
-          path: artifacts/bundle-changes-group-2
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 3
-        if: needs.bundle-group-3.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-3
-          path: artifacts/bundle-changes-group-3
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 4
-        if: needs.bundle-group-4.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-4
-          path: artifacts/bundle-changes-group-4
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 5
-        if: needs.bundle-group-5.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-5
-          path: artifacts/bundle-changes-group-5
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 6
-        if: needs.bundle-group-6.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-6
-          path: artifacts/bundle-changes-group-6
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 7
-        if: needs.bundle-group-7.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-7
-          path: artifacts/bundle-changes-group-7
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Download Bundle artifacts group 8
-        if: needs.bundle-group-8.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: bundle-changes-group-8
-          path: artifacts/bundle-changes-group-8
-          retry-count: 5
-          retry-delay: 30000
-
-      - name: Merge artifacts into BA-Assets
+      - name: Download Bundle zip artifacts
+        if: always()
         run: |
-          echo "开始合并artifacts到BA-Assets..."
+          mkdir -p artifacts/bundle-zips
+          for group in 1 2 3 4; do
+            if [ "${{ needs.bundle-group-$group.result }}" == "success" ]; then
+              echo "Downloading bundle zip for group $group"
+              if curl -f -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                 -H "Accept: application/vnd.github.v3+json" \
+                 -o "artifacts/bundle-zips/group-$group.zip" \
+                 "https://api.github.com/repos/${{ github.repository }}/actions/artifacts?name=bundle-zip-group-$group&per_page=1"; then
+                echo "下载bundle group $group ZIP包成功"
+              else
+                echo "没有bundle group $group的ZIP包"
+                touch artifacts/bundle-zips/group-$group.empty
+              fi
+            else
+              echo "Bundle group $group skipped or failed"
+              touch artifacts/bundle-zips/group-$group.empty
+            fi
+          done
+
+      - name: Extract and merge artifacts
+        run: |
+          echo "解压并合并artifacts到BA-Assets..."
           
-          mkdir -p artifacts/table-changes artifacts/media-changes \
-                   artifacts/bundle-changes-group-1 artifacts/bundle-changes-group-2 \
-                   artifacts/bundle-changes-group-3 artifacts/bundle-changes-group-4 \
-                   artifacts/bundle-changes-group-5 artifacts/bundle-changes-group-6 \
-                   artifacts/bundle-changes-group-7 artifacts/bundle-changes-group-8
-          
+          # 处理Table artifacts
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
             echo "合并table changes..."
             if [ -d "artifacts/table-changes/BA-Assets" ]; then
@@ -903,15 +659,22 @@ jobs:
             fi
           fi
           
-          if [ -d "artifacts/media-changes" ] && [ "$(ls -A artifacts/media-changes 2>/dev/null)" ]; then
-            echo "合并media changes..."
-            rsync -av artifacts/media-changes/ BA-Assets/ || true
+          # 处理Media ZIP包
+          if [ -f "artifacts/media-zip/media_extracted_content.zip" ]; then
+            echo "解压Media ZIP包..."
+            unzip -q -o artifacts/media-zip/media_extracted_content.zip -d BA-Assets/
+            echo "Media内容已合并到BA-Assets"
+          elif [ -f "artifacts/media-zip/empty_media.zip" ]; then
+            echo "没有Media内容可合并"
           fi
           
-          for group in 1 2 3 4 5 6 7 8; do
-            if [ -d "artifacts/bundle-changes-group-$group" ] && [ "$(ls -A artifacts/bundle-changes-group-$group 2>/dev/null)" ]; then
-              echo "合并bundle changes group $group..."
-              rsync -av artifacts/bundle-changes-group-$group/ BA-Assets/ || true
+          # 处理Bundle ZIP包
+          for group in 1 2 3 4; do
+            if [ -f "artifacts/bundle-zips/group-$group.zip" ]; then
+              echo "解压bundle group $group ZIP包..."
+              unzip -q -o "artifacts/bundle-zips/group-$group.zip" -d BA-Assets/
+            elif [ -f "artifacts/bundle-zips/group-$group.empty" ]; then
+              echo "没有bundle group $group的内容可合并"
             fi
           done
           
@@ -923,163 +686,11 @@ jobs:
           git config --global user.name "GitHub Actions"
 
       - name: Smart commit to BA-Assets
+        env:
+          BA_VERSION_NAME: ${{ needs.setup.outputs.version }}
         run: |
-          cd BA-Assets
-          
-          smart_commit() {
-            local file_type=$1
-            local pattern=$2
-            local commit_msg=$3
-            local batch_size=200
-            local batch_num=1
-            
-            echo "Processing $file_type files..."
-            
-            if ! find . -name "$pattern" -type f | grep -q .; then
-              echo "No $file_type files found, skipping..."
-              return 0
-            fi
-            
-            local file_count=0
-            local current_batch=()
-            
-            while IFS= read -r -d '' file; do
-              if [ -f "$file" ]; then
-                current_batch+=("$file")
-                ((file_count++))
-                
-                if [ ${#current_batch[@]} -ge $batch_size ]; then
-                  echo "Adding ${#current_batch[@]} $file_type files (batch $batch_num)"
-                  
-                  for file_path in "${current_batch[@]}"; do
-                    git add -- "$file_path"
-                  done
-                  
-                  if ! git diff --staged --quiet; then
-                    if git commit -m "$commit_msg (batch $batch_num)"; then
-                      echo "✓ Committed batch $batch_num"
-                      if git push origin; then
-                        echo "✓ Pushed batch $batch_num"
-                      else
-                        echo "✗ Failed to push batch $batch_num, resetting..."
-                        git reset --hard HEAD~1
-                        for file_path in "${current_batch[@]}"; do
-                          git add -- "$file_path"
-                        done
-                      fi
-                    else
-                      echo "✗ Failed to commit batch $batch_num"
-                      git reset
-                    fi
-                  else
-                    echo "No changes to commit in batch $batch_num"
-                    current_batch=()
-                  fi
-                  
-                  batch_num=$((batch_num + 1))
-                  current_batch=()
-                fi
-              fi
-            done < <(find . -name "$pattern" -type f -print0 2>/dev/null)
-            
-            if [ ${#current_batch[@]} -gt 0 ]; then
-              echo "Adding final batch of ${#current_batch[@]} $file_type files"
-              
-              for file_path in "${current_batch[@]}"; do
-                git add -- "$file_path"
-              done
-              
-              if ! git diff --staged --quiet; then
-                if git commit -m "$commit_msg (final batch)"; then
-                  echo "✓ Committed final batch"
-                  if git push origin; then
-                    echo "✓ Pushed final batch"
-                  else
-                    echo "✗ Failed to push final batch"
-                    git reset --hard HEAD~1
-                  fi
-                else
-                  echo "✗ Failed to commit final batch"
-                  git reset
-                fi
-              else
-                echo "No changes to commit in final batch"
-              fi
-            fi
-            
-            echo "Completed processing $file_count $file_type files"
-          }
-          
-          echo "Starting smart commit process..."
-          
-          if git diff --cached --quiet && git diff --quiet; then
-            echo "No changes detected in BA-Assets, skipping commit process"
-            cd ..
-            exit 0
-          fi
-          
-          smart_commit "json" "*.json" "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
-          smart_commit "zip" "*.zip" "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
-          smart_commit "png" "*.png" "Update Assets: png files - version ${{ needs.setup.outputs.version }}"
-          smart_commit "jpg" "*.jpg" "Update Assets: jpg files - version ${{ needs.setup.outputs.version }}"
-          smart_commit "ogg" "*.ogg" "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
-          smart_commit "mp4" "*.mp4" "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
-          
-          echo "Processing other file types..."
-          other_files=()
-          while IFS= read -r -d '' file; do
-            other_files+=("$file")
-          done < <(find . -type f ! -name "*.json" ! -name "*.zip" ! -name "*.png" ! -name "*.jpg" ! -name "*.ogg" ! -name "*.mp4" -print0 2>/dev/null)
-          
-          if [ ${#other_files[@]} -gt 0 ]; then
-            echo "Found ${#other_files[@]} other files"
-            
-            batch_num=1
-            current_batch=()
-            
-            for file_path in "${other_files[@]}"; do
-              current_batch+=("$file_path")
-              
-              if [ ${#current_batch[@]} -ge 200 ]; then
-                for f in "${current_batch[@]}"; do
-                  git add -- "$f"
-                done
-                
-                if ! git diff --staged --quiet; then
-                  if git commit -m "Update Assets: other files batch $batch_num - version ${{ needs.setup.outputs.version }}"; then
-                    if git push origin; then
-                      echo "✓ Pushed other files batch $batch_num"
-                    else
-                      echo "✗ Failed to push other files batch $batch_num"
-                      git reset --hard HEAD~1
-                    fi
-                  fi
-                else
-                  echo "No changes to commit in other files batch $batch_num"
-                fi
-                
-                batch_num=$((batch_num + 1))
-                current_batch=()
-              fi
-            done
-            
-            if [ ${#current_batch[@]} -gt 0 ]; then
-              for f in "${current_batch[@]}"; do
-                git add -- "$f"
-              done
-              
-              if ! git diff --staged --quiet; then
-                git commit -m "Update Assets: final other files - version ${{ needs.setup.outputs.version }}"
-                git push origin
-              else
-                echo "No changes to commit in final other files batch"
-              fi
-            fi
-          else
-            echo "No other files found"
-          fi
-          
-          echo "Smart commit process completed"
+          chmod +x commit.sh
+          ./commit.sh
 
       - name: Cleanup
         run: |
