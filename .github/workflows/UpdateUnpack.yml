@@ -792,10 +792,8 @@ jobs:
     needs: [Table, Media, bundle-group-1, bundle-group-2, bundle-group-3, bundle-group-4, bundle-group-5, bundle-group-6, bundle-group-7, bundle-group-8]
     if: always() && (contains(needs.*.result, 'success') || contains(needs.*.result, 'skipped'))
     steps:
-      - name: Clone repositories
+      - name: Clone BA-Assets repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Download Table artifacts
@@ -888,11 +886,10 @@ jobs:
           retry-count: 5
           retry-delay: 30000
 
-      - name: Apply changes from artifacts
+      - name: Merge artifacts into BA-Assets
         run: |
-          echo "Applying changes from artifacts..."
+          echo "开始合并artifacts到BA-Assets..."
           
-          # 创建必要的目录结构
           mkdir -p artifacts/table-changes artifacts/media-changes \
                    artifacts/bundle-changes-group-1 artifacts/bundle-changes-group-2 \
                    artifacts/bundle-changes-group-3 artifacts/bundle-changes-group-4 \
@@ -900,62 +897,30 @@ jobs:
                    artifacts/bundle-changes-group-7 artifacts/bundle-changes-group-8
           
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
-            echo "Applying table changes..."
-            if [ -d "artifacts/table-changes/BA-FlatData" ]; then
-              rsync -av artifacts/table-changes/BA-FlatData/ BA-FlatData/ || true
-            fi
-            if [ -d "artifacts/table-changes/BA-Text" ]; then
-              rsync -av artifacts/table-changes/BA-Text/ BA-Text/ || true
-            fi
+            echo "合并table changes..."
             if [ -d "artifacts/table-changes/BA-Assets" ]; then
               rsync -av artifacts/table-changes/BA-Assets/ BA-Assets/ || true
             fi
-          else
-            echo "No table changes to apply"
           fi
           
           if [ -d "artifacts/media-changes" ] && [ "$(ls -A artifacts/media-changes 2>/dev/null)" ]; then
-            echo "Applying media changes..."
+            echo "合并media changes..."
             rsync -av artifacts/media-changes/ BA-Assets/ || true
-          else
-            echo "No media changes to apply"
           fi
           
           for group in 1 2 3 4 5 6 7 8; do
             if [ -d "artifacts/bundle-changes-group-$group" ] && [ "$(ls -A artifacts/bundle-changes-group-$group 2>/dev/null)" ]; then
-              echo "Applying bundle changes from group $group..."
+              echo "合并bundle changes group $group..."
               rsync -av artifacts/bundle-changes-group-$group/ BA-Assets/ || true
-            else
-              echo "No bundle changes from group $group to apply"
             fi
           done
           
-          echo "All changes applied successfully"
+          echo "合并完成"
 
       - name: Configure git
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-
-      - name: Commit to BA-FlatData
-        run: |
-          cd BA-FlatData
-          git add .
-          if git diff --staged --quiet; then
-            echo "No changes in BA-FlatData"
-          else
-            git commit -m "Update FlatData version ${{ needs.setup.outputs.version }}" && git push origin
-          fi
-
-      - name: Commit to BA-Text
-        run: |
-          cd BA-Text
-          git add .
-          if git diff --staged --quiet; then
-            echo "No changes in BA-Text"
-          else
-            git commit -m "Update Text version ${{ needs.setup.outputs.version }}" && git push origin
-          fi
 
       - name: Smart commit to BA-Assets
         run: |
@@ -970,7 +935,6 @@ jobs:
             
             echo "Processing $file_type files..."
             
-            # 检查是否有匹配的文件
             if ! find . -name "$pattern" -type f | grep -q .; then
               echo "No $file_type files found, skipping..."
               return 0
@@ -979,32 +943,26 @@ jobs:
             local file_count=0
             local current_batch=()
             
-            # 使用 while read 安全处理文件名
             while IFS= read -r -d '' file; do
               if [ -f "$file" ]; then
                 current_batch+=("$file")
                 ((file_count++))
                 
-                # 达到批量大小时提交
                 if [ ${#current_batch[@]} -ge $batch_size ]; then
                   echo "Adding ${#current_batch[@]} $file_type files (batch $batch_num)"
                   
-                  # 安全地添加文件
                   for file_path in "${current_batch[@]}"; do
                     git add -- "$file_path"
                   done
                   
-                  # 检查是否有变更需要提交
                   if ! git diff --staged --quiet; then
                     if git commit -m "$commit_msg (batch $batch_num)"; then
                       echo "✓ Committed batch $batch_num"
-                      # 尝试推送，如果失败则回退
                       if git push origin; then
                         echo "✓ Pushed batch $batch_num"
                       else
                         echo "✗ Failed to push batch $batch_num, resetting..."
                         git reset --hard HEAD~1
-                        # 将文件重新加入暂存区，等待后续处理
                         for file_path in "${current_batch[@]}"; do
                           git add -- "$file_path"
                         done
@@ -1024,7 +982,6 @@ jobs:
               fi
             done < <(find . -name "$pattern" -type f -print0 2>/dev/null)
             
-            # 处理剩余文件
             if [ ${#current_batch[@]} -gt 0 ]; then
               echo "Adding final batch of ${#current_batch[@]} $file_type files"
               
@@ -1053,17 +1010,14 @@ jobs:
             echo "Completed processing $file_count $file_type files"
           }
           
-          # 按文件类型顺序处理
           echo "Starting smart commit process..."
           
-          # 先检查是否有任何变更
           if git diff --cached --quiet && git diff --quiet; then
             echo "No changes detected in BA-Assets, skipping commit process"
             cd ..
             exit 0
           fi
           
-          # 先处理小文件，最后处理大文件
           smart_commit "json" "*.json" "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
           smart_commit "zip" "*.zip" "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
           smart_commit "png" "*.png" "Update Assets: png files - version ${{ needs.setup.outputs.version }}"
@@ -1071,7 +1025,6 @@ jobs:
           smart_commit "ogg" "*.ogg" "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
           smart_commit "mp4" "*.mp4" "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
           
-          # 处理其他文件类型
           echo "Processing other file types..."
           other_files=()
           while IFS= read -r -d '' file; do
@@ -1110,7 +1063,6 @@ jobs:
               fi
             done
             
-            # 处理最后一批
             if [ ${#current_batch[@]} -gt 0 ]; then
               for f in "${current_batch[@]}"; do
                 git add -- "$f"
@@ -1131,7 +1083,7 @@ jobs:
 
       - name: Cleanup
         run: |
-          rm -rf artifacts BA-FlatData BA-Text BA-Assets
+          rm -rf artifacts
 
   media-bundle-run:
     runs-on: ubuntu-latest
