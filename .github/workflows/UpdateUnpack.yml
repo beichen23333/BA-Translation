@@ -1,4 +1,4 @@
-name: Update Unpack
+name: Update Unpack Table & Media
 
 on:
   workflow_dispatch:
@@ -8,13 +8,8 @@ on:
         required: false
         type: boolean
         default: true
-      Downloads_Meida:
+      Downloads_Media:
         description: 'Downloads Media?'
-        required: false
-        type: boolean
-        default: false
-      Extract_Bundle:
-        description: 'Extract Bundle?'
         required: false
         type: boolean
         default: false
@@ -32,7 +27,6 @@ jobs:
       trigger-type: ${{ steps.detect-trigger.outputs.trigger-type }}
       unpack-flatdata: ${{ steps.detect-params.outputs.unpack-flatdata }}
       downloads-media: ${{ steps.detect-params.outputs.downloads-media }}
-      extract-bundle: ${{ steps.detect-params.outputs.extract-bundle }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,24 +69,14 @@ jobs:
       - name: Detect trigger parameters
         id: detect-params
         run: |
-          # 检测触发类型和参数
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            echo "检测到 repository_dispatch 触发"
-            
-            # 从 client_payload 读取参数，设置默认值
-            UNPACK_FLATDATA="${{ github.event.client_payload.unpack_flatdata || 'false' }}"
+            UNPACK_FLATDATA="${{ github.event.client_payload.unpack_flatdata || 'true' }}"
             DOWNLOADS_MEDIA="${{ github.event.client_payload.downloads_media || 'false' }}"
-            EXTRACT_BUNDLE="${{ github.event.client_payload.extract_bundle || 'false' }}"
-            
             echo "unpack-flatdata=$UNPACK_FLATDATA" >> $GITHUB_OUTPUT
-            echo "downloads-media=$DOWNLOADS_MEDIA" >> $GITHUB_OUTPUT  
-            echo "extract-bundle=$EXTRACT_BUNDLE" >> $GITHUB_OUTPUT
-            
+            echo "downloads-media=$DOWNLOADS_MEDIA" >> $GITHUB_OUTPUT
           else
-            # workflow_dispatch 使用 inputs
             echo "unpack-flatdata=${{ inputs.Unpack_FlatData || 'true' }}" >> $GITHUB_OUTPUT
-            echo "downloads-media=${{ inputs.Downloads_Meida || 'false' }}" >> $GITHUB_OUTPUT
-            echo "extract-bundle=${{ inputs.Extract_Bundle || 'false' }}" >> $GITHUB_OUTPUT
+            echo "downloads-media=${{ inputs.Downloads_Media || 'false' }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Debug trigger info
@@ -103,7 +87,6 @@ jobs:
           echo "Detected parameters:"
           echo "  unpack-flatdata: ${{ steps.detect-params.outputs.unpack-flatdata }}"
           echo "  downloads-media: ${{ steps.detect-params.outputs.downloads-media }}"
-          echo "  extract-bundle: ${{ steps.detect-params.outputs.extract-bundle }}"
 
       - name: Get version
         id: get-versions
@@ -113,335 +96,7 @@ jobs:
         run: |
           echo "BA_VERSION_NAME=${{ steps.get-versions.outputs.BA_VERSION_NAME }}" >> $GITHUB_ENV
 
-  bundle-setup: # 防止文件过大及其效率问题，修改为分4组运行
-    runs-on: ubuntu-latest
-    needs: setup
-    if: ${{ needs.setup.outputs.extract-bundle == 'true' }}
-    outputs:
-      bundle-packs: ${{ steps.get-bundle-packs.outputs.bundle-packs }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Get Bundle packs list
-        id: get-bundle-packs
-        env:
-          DEFAULT_BUNDLE_PACKS: ${{ secrets.DEFAULT_BUNDLE_PACKS || 'FullPatch_100.zip,FullPatch_101.zip,FullPatch_102.zip,FullPatch_103.zip|FullPatch_104.zip,FullPatch_105.zip,FullPatch_106.zip,FullPatch_107.zip|FullPatch_108.zip,FullPatch_109.zip,FullPatch_110.zip,FullPatch_111.zip|FullPatch_112.zip,FullPatch_113.zip,FullPatch_114.zip,FullPatch_115.zip' }}
-        run: |
-          chmod +x update.sh
-          ./update.sh JP Bundle 1 catalog-only
-          python get_bundle_packs.py >> "$GITHUB_OUTPUT"
-
-  bundle-group-1:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ needs.setup.outputs.extract-bundle == 'true' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Extract bundle group 1
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP1_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f1)
-          echo "Processing bundle group 1: $GROUP1_PACKS"
-          if [ -n "$GROUP1_PACKS" ] && [ "$GROUP1_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP1_PACKS"
-          else
-            echo "No packs in group 1, skipping"
-          fi
-
-      - name: Create bundle zip package
-        run: |
-          echo "创建bundle提取内容的ZIP包..."
-          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
-            cd ./bundle_output
-            zip -r "../bundle_extracted_content_group1.zip" .
-            cd ..
-            echo "已创建bundle_extracted_content_group1.zip"
-          else
-            echo "没有bundle提取内容可打包"
-            touch empty_bundle_group1.zip
-          fi
-
-      - name: Upload Bundle zip artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-zip-group-1
-          path: |
-            bundle_extracted_content_group1.zip
-            empty_bundle_group1.zip
-          retention-days: 1
-
-  bundle-group-2:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ needs.setup.outputs.extract-bundle == 'true' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Extract bundle group 2
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP2_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f2)
-          echo "Processing bundle group 2: $GROUP2_PACKS"
-          if [ -n "$GROUP2_PACKS" ] && [ "$GROUP2_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP2_PACKS"
-          else
-            echo "No packs in group 2, skipping"
-          fi
-
-      - name: Create bundle zip package
-        run: |
-          echo "创建bundle提取内容的ZIP包..."
-          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
-            cd ./bundle_output
-            zip -r "../bundle_extracted_content_group2.zip" .
-            cd ..
-            echo "已创建bundle_extracted_content_group2.zip"
-          else
-            echo "没有bundle提取内容可打包"
-            touch empty_bundle_group2.zip
-          fi
-
-      - name: Upload Bundle zip artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-zip-group-2
-          path: |
-            bundle_extracted_content_group2.zip
-            empty_bundle_group2.zip
-          retention-days: 1
-
-  bundle-group-3:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ needs.setup.outputs.extract-bundle == 'true' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Extract bundle group 3
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP3_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f3)
-          echo "Processing bundle group 3: $GROUP3_PACKS"
-          if [ -n "$GROUP3_PACKS" ] && [ "$GROUP3_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP3_PACKS"
-          else
-            echo "No packs in group 3, skipping"
-          fi
-
-      - name: Create bundle zip package
-        run: |
-          echo "创建bundle提取内容的ZIP包..."
-          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
-            cd ./bundle_output
-            zip -r "../bundle_extracted_content_group3.zip" .
-            cd ..
-            echo "已创建bundle_extracted_content_group3.zip"
-          else
-            echo "没有bundle提取内容可打包"
-            touch empty_bundle_group3.zip
-          fi
-
-      - name: Upload Bundle zip artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-zip-group-3
-          path: |
-            bundle_extracted_content_group3.zip
-            empty_bundle_group3.zip
-          retention-days: 1
-
-  bundle-group-4:
-    runs-on: ubuntu-latest
-    needs: [setup, bundle-setup]
-    if: ${{ needs.setup.outputs.extract-bundle == 'true' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Clone repository
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-
-      - name: Move contents to current directory
-        run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Login
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Get version from setup job
-        run: |
-          echo "BA_VERSION_NAME=${{ needs.setup.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Extract bundle group 4
-        run: |
-          chmod +x update.sh
-          ALL_PACKS="${{ needs.bundle-setup.outputs.bundle-packs }}"
-          GROUP4_PACKS=$(echo "$ALL_PACKS" | cut -d'|' -f4)
-          echo "Processing bundle group 4: $GROUP4_PACKS"
-          if [ -n "$GROUP4_PACKS" ] && [ "$GROUP4_PACKS" != "" ]; then
-            ./update.sh JP Bundle 8 "$GROUP4_PACKS"
-          else
-            echo "No packs in group 4, skipping"
-          fi
-
-      - name: Create bundle zip package
-        run: |
-          echo "创建bundle提取内容的ZIP包..."
-          if [ -d "./bundle_output" ] && [ "$(ls -A ./bundle_output 2>/dev/null)" ]; then
-            cd ./bundle_output
-            zip -r "../bundle_extracted_content_group4.zip" .
-            cd ..
-            echo "已创建bundle_extracted_content_group4.zip"
-          else
-            echo "没有bundle提取内容可打包"
-            touch empty_bundle_group4.zip
-          fi
-
-      - name: Upload Bundle zip artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-zip-group-4
-          path: |
-            bundle_extracted_content_group4.zip
-            empty_bundle_group4.zip
-          retention-days: 1
-
-  Table:
+  table:
     runs-on: ubuntu-latest
     needs: setup
     if: ${{ needs.setup.outputs.unpack-flatdata == 'true' }}
@@ -521,7 +176,6 @@ jobs:
 
           for file in "${FILES[@]}"; do
             if [ -f "BA-Assets/$file" ]; then
-              echo "删除已存在的文件: BA-Assets/$file"
               rm "BA-Assets/$file"
             fi
           done
@@ -541,11 +195,9 @@ jobs:
           for item in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
               if [ -e "$item" ]; then
                   if [ -d "$item" ]; then
-                      echo "Processing directory: $item"
                       find "$item" -type f | while read -r file; do
                           file_size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
                           if [ "$file_size" -gt 104857600 ]; then
-                              echo "[$file] >100 MB ($((file_size/1048576)) MB), compressing to $file.gz"
                               gzip -c "$file" > "$file.gz"
                               rm "$file"
                           fi
@@ -553,7 +205,6 @@ jobs:
                   else
                       file_size=$(stat -c%s "$item" 2>/dev/null || stat -f%z "$item")
                       if [ "$file_size" -gt 104857600 ]; then
-                          echo "[$item] >100 MB ($((file_size/1048576)) MB), compressing to $item.gz"
                           gzip -c "$item" > "$item.gz"
                           rm "$item"
                       fi
@@ -571,7 +222,7 @@ jobs:
             BA-Assets/
           retention-days: 1
 
-  Media:
+  media:
     runs-on: ubuntu-latest
     needs: setup
     if: ${{ needs.setup.outputs.downloads-media == 'true' }}
@@ -616,14 +267,11 @@ jobs:
 
       - name: Create media zip package
         run: |
-          echo "创建Media文件的ZIP包..."
           if [ -d "./media_temp" ] && [ "$(ls -A ./media_temp 2>/dev/null)" ]; then
             cd ./media_temp
             zip -r "../media_extracted_content.zip" .
-            cd ..
-            echo "已创建media_extracted_content.zip"
+            cd
           else
-            echo "没有Media文件可打包"
             touch empty_media.zip
           fi
 
@@ -638,7 +286,7 @@ jobs:
 
   final-commit:
     runs-on: ubuntu-latest
-    needs: [setup, Table, Media, bundle-group-1, bundle-group-2, bundle-group-3, bundle-group-4]
+    needs: [setup, table, media]
     if: always() && (contains(needs.*.result, 'success') || contains(needs.*.result, 'skipped'))
     env:
       BA_VERSION_NAME: ${{ needs.setup.outputs.version }}
@@ -653,7 +301,7 @@ jobs:
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Assets.git
 
       - name: Download Table artifacts
-        if: needs.Table.result == 'success'
+        if: needs.table.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: table-changes
@@ -662,7 +310,7 @@ jobs:
           retry-delay: 30000
 
       - name: Download Media zip artifacts
-        if: needs.Media.result == 'success'
+        if: needs.media.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: media-zip
@@ -672,24 +320,17 @@ jobs:
 
       - name: Extract and merge all artifacts to BA-Assets
         run: |
-          echo "解压并合并所有内容到BA-Assets..."
-          
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
-            echo "合并table changes..."
             if [ -d "artifacts/table-changes/BA-Assets" ]; then
               rsync -av artifacts/table-changes/BA-Assets/ BA-Assets/ || true
             fi
           fi
           
           if [ -f "artifacts/media-zip/media_extracted_content.zip" ]; then
-            echo "解压Media ZIP包..."
             unzip -q -o artifacts/media-zip/media_extracted_content.zip -d BA-Assets/
-            echo "Media内容已合并到BA-Assets"
           elif [ -f "artifacts/media-zip/empty_media.zip" ]; then
             echo "没有Media内容可合并"
           fi
-          
-          echo "所有内容合并完成"
 
       - name: Configure git
         run: |
@@ -699,15 +340,12 @@ jobs:
       - name: Set version in environment
         run: |
           echo "BA_VERSION_NAME=$BA_VERSION_NAME"
-          echo "当前版本: $BA_VERSION_NAME"
 
       - name: Smart commit to BA-Assets
-        if: needs.Table.result == 'success' || needs.Media.result == 'success'
+        if: needs.table.result == 'success' || needs.media.result == 'success'
         run: |
-          echo "开始提交到 BA-Assets，版本: $BA_VERSION_NAME"
           cd BA-Assets
           
-          echo "Committing mp4 files..."
           find . -name "*.mp4" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -715,15 +353,13 @@ jobs:
             git commit -m "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
           fi
   
-          echo "Committing jpg files..."
           find . -name "*.jpg" -type f | head -1000 | while read file; do
             git add "$file"
           done
           if ! git diff --staged --quiet; then
             git commit -m "Update Assets: jpg files - version ${{ needs.setup.outputs.version }}"
-          fi        
+          done
 
-          echo "Committing ogg files..."
           find . -name "*.ogg" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -731,7 +367,6 @@ jobs:
             git commit -m "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
           fi
           
-          echo "Committing json files..."
           find . -name "*.json" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -739,7 +374,6 @@ jobs:
             git commit -m "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
           fi
           
-          echo "Committing zip files..."
           find . -name "*.zip" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -747,7 +381,6 @@ jobs:
             git commit -m "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
           fi
           
-          echo "Committing remaining files in batches..."
           batch_num=1
           find . -type f | grep -vE '\.(mp4|ogg|json|zip)$' | while read file; do
             git add "$file"
@@ -769,27 +402,19 @@ jobs:
         run: |
           rm -rf artifacts
 
-  media-bundle-run:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.client_payload.run_media_bundle == true }}
+  media-run:
+    needs: [setup, table, media, final-commit]
+    if: ${{ github.event.client_payload.run_media == true }}
     steps:
-      - name: Trigger workflow with Media and Bundle enabled
+      - name: Trigger workflow with Media enabled
         run: |
           curl -X POST \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -d '{
-            "event_type": "run-deployment",
-            "client_payload": {
-              "unpack_flatdata": false,
-              "downloads_media": true,
-              "extract_bundle": true,
-              "trigger_source": "media-bundle-run"
-            }
-          }'
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "run-deployment","client_payload": {"unpack_flatdata": false,"downloads_media": true}}'
 
-      - name: Deploy Translation
+      - name: Deploy Extract
         run: |
           curl -X POST \
             -H "Accept: application/vnd.github+json" \

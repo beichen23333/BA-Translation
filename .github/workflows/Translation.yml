@@ -62,7 +62,12 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          python translation.py "${{ inputs.file_path }}" translation_noun.txt "${{ inputs.output_path }}" config.json "${{ inputs.batch_size }}" "${{ inputs.max_workers }}"
+          FILE_PATH="${{ github.event.client_payload.file_path || inputs.file_path }}"
+          OUTPUT_PATH="${{ github.event.client_payload.output_path || inputs.output_path }}"
+          BATCH_SIZE="${{ github.event.client_payload.batch_size || inputs.batch_size }}"
+          MAX_WORKERS="${{ github.event.client_payload.max_workers || inputs.max_workers }}"
+          
+          python translation.py "$FILE_PATH" translation_noun.txt "$OUTPUT_PATH" config.json "$BATCH_SIZE" "$MAX_WORKERS"
 
       - name: Commit translation files
         run: |
