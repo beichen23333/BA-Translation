@@ -320,17 +320,24 @@ jobs:
 
       - name: Extract and merge all artifacts to BA-Assets
         run: |
+          echo "解压并合并所有内容到BA-Assets..."
+          
           if [ -d "artifacts/table-changes" ] && [ "$(ls -A artifacts/table-changes 2>/dev/null)" ]; then
+            echo "合并table changes..."
             if [ -d "artifacts/table-changes/BA-Assets" ]; then
               rsync -av artifacts/table-changes/BA-Assets/ BA-Assets/ || true
             fi
           fi
           
           if [ -f "artifacts/media-zip/media_extracted_content.zip" ]; then
+            echo "解压Media ZIP包..."
             unzip -q -o artifacts/media-zip/media_extracted_content.zip -d BA-Assets/
+            echo "Media内容已合并到BA-Assets"
           elif [ -f "artifacts/media-zip/empty_media.zip" ]; then
             echo "没有Media内容可合并"
           fi
+          
+          echo "所有内容合并完成"
 
       - name: Configure git
         run: |
@@ -340,12 +347,15 @@ jobs:
       - name: Set version in environment
         run: |
           echo "BA_VERSION_NAME=$BA_VERSION_NAME"
+          echo "当前版本: $BA_VERSION_NAME"
 
       - name: Smart commit to BA-Assets
-        if: needs.table.result == 'success' || needs.media.result == 'success'
+        if: needs.Table.result == 'success' || needs.Media.result == 'success'
         run: |
+          echo "开始提交到 BA-Assets，版本: $BA_VERSION_NAME"
           cd BA-Assets
           
+          echo "Committing mp4 files..."
           find . -name "*.mp4" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -353,13 +363,15 @@ jobs:
             git commit -m "Update Assets: mp4 files - version ${{ needs.setup.outputs.version }}"
           fi
   
+          echo "Committing jpg files..."
           find . -name "*.jpg" -type f | head -1000 | while read file; do
             git add "$file"
           done
           if ! git diff --staged --quiet; then
             git commit -m "Update Assets: jpg files - version ${{ needs.setup.outputs.version }}"
-          done
+          fi        
 
+          echo "Committing ogg files..."
           find . -name "*.ogg" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -367,6 +379,7 @@ jobs:
             git commit -m "Update Assets: ogg files - version ${{ needs.setup.outputs.version }}"
           fi
           
+          echo "Committing json files..."
           find . -name "*.json" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -374,6 +387,7 @@ jobs:
             git commit -m "Update Assets: json files - version ${{ needs.setup.outputs.version }}"
           fi
           
+          echo "Committing zip files..."
           find . -name "*.zip" -type f | head -1000 | while read file; do
             git add "$file"
           done
@@ -381,6 +395,7 @@ jobs:
             git commit -m "Update Assets: zip files - version ${{ needs.setup.outputs.version }}"
           fi
           
+          echo "Committing remaining files in batches..."
           batch_num=1
           find . -type f | grep -vE '\.(mp4|ogg|json|zip)$' | while read file; do
             git add "$file"
