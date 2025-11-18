@@ -36,7 +36,7 @@ jobs:
       - name: Check target files changes
         id: check_changes
         run: |
-          if [ -f "日服备份.zip" ] || [ -d "DBSchema" ] || [ -d "ExcelTable" ]; then
+          if [ -f "日服备份.zip" ] && ([ -d "NewBack" ] || [ -d "ReviseBack" ]); then
             echo "目标文件存在"
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
@@ -94,6 +94,12 @@ jobs:
       - name: Commit files Translation
         run: |
           cd BA-Text-Translation
+          if [ -d "NewBack" ]; then
+            rm -rf "NewBack"
+          fi      
+          if [ -d "ReviseBack" ]; then
+            rm -rf "ReviseBack"
+          fi
           git add .
 
           git commit -m "[skip] auto sync $(date +%F-%T)"
