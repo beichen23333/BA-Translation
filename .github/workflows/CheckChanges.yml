@@ -66,11 +66,14 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Tools.git BA-Tools
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git BA-Text
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git BA-Unpack
 
       - name: Move contents to current directory
         run: |
           mv BA-Tools/* .
           rm -rf BA-Tools
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
 
       - name: Get new version
         id: new_ver
