@@ -54,7 +54,7 @@ jobs:
         with:
           repository: beichen23333/BA-Text-Translation
           token: ${{ secrets.APK_SRC_REPO }}
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: get SSH key
         run: |
