@@ -227,11 +227,6 @@ jobs:
           zip -j "FlatData${BA_VERSION_NAME}.zip" *
           mv "FlatData${BA_VERSION_NAME}.zip" ../../BA-FlatData/
           cd
-          cd BA-FlatData
-          git add .
-
-          git commit -m "提交文件"
-          git push origin
 
       - name: Upload Table artifacts
         uses: actions/upload-artifact@v4
@@ -239,6 +234,7 @@ jobs:
           name: table-changes
           path: |
             BA-Text/
+            BA-FlatData/
           retention-days: 1
 
   media:
@@ -430,6 +426,13 @@ jobs:
             git commit -m "Update Assets: final batch of remaining files - version ${{ needs.setup.outputs.version }}"
           fi
           
+          git push origin
+
+          cd
+          cd BA-FlatData
+          git add .
+
+          git commit -m "提交文件"
           git push origin
 
       - name: Cleanup
