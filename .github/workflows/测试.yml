@@ -6,21 +6,32 @@ on:
       max_length:
         description: 'Maximum key length to test'
         required: false
-        default: '15'
-      start_length:
-        description: 'Start from key length'
+        default: '8'
+      charset_type:
+        description: 'Character set type'
         required: false
-        default: '1'
-      excluded_workers:
-        description: 'Excluded worker IDs (comma separated)'
+        default: 'alphanum'
+        type: choice
+        options:
+        - alphanum
+        - simple
+        - full
+      excluded_keys:
+        description: 'Excluded keys file (base64 encoded)'
         required: false
         default: ''
+      iteration:
+        description: 'Iteration number (auto-increment)'
+        required: false
+        default: '1'
 
 jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
       timestamp: ${{ steps.timestamp.outputs.time }}
+      run_id: ${{ steps.run_id.outputs.id }}
+      iteration: ${{ steps.iteration.outputs.num }}
     steps:
       - uses: actions/checkout@v4
       - name: Clone repository
@@ -32,18 +43,25 @@ jobs:
           rm -rf BA-Unpack
       - name: Download ExcelDB.db
         run: |
-          wget https://prod-clientpatch.bluearchiveyostar.com/r86_vm4arsjw95mxfrp4m01q_2/TableBundles/ExcelDB.db -O ExcelDB.db
-      - name: Create progress directory
+          wget -q https://prod-clientpatch.bluearchiveyostar.com/r86_vm4arsjw95mxfrp4m01q_2/TableBundles/ExcelDB.db -O ExcelDB.db
+      - name: Create directories
         run: |
-          mkdir -p progress
-      - name: Generate timestamp
+          mkdir -p progress excluded_keys
+      - name: Decode excluded keys if provided
+        if: ${{ github.event.inputs.excluded_keys != '' }}
+        run: |
+          echo "${{ github.event.inputs.excluded_keys }}" | base64 -d > excluded_keys/previous.txt
+          echo "Loaded $(wc -l < excluded_keys/previous.txt) excluded keys"
+      - name: Generate IDs
         id: timestamp
         run: |
           echo "time=$(date +%s)" >> $GITHUB_OUTPUT
-      - name: Upload files for next job
+          echo "id=run-${{ github.run_id }}-$(date +%s)" >> $GITHUB_OUTPUT
+          echo "num=${{ github.event.inputs.iteration }}" >> $GITHUB_OUTPUT
+      - name: Upload workspace
         uses: actions/upload-artifact@v4
         with:
-          name: workspace-${{ steps.timestamp.outputs.time }}
+          name: workspace-${{ steps.timestamp.outputs.id }}
           path: |
             .
           retention-days: 7
@@ -55,132 +73,155 @@ jobs:
     strategy:
       matrix:
         worker: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-      fail-fast: false
-      max-parallel: 20
     steps:
-      - name: Check if worker is excluded
-        id: check_excluded
-        run: |
-          excluded="${{ github.event.inputs.excluded_workers }}"
-          if [ -n "$excluded" ]; then
-            IFS=',' read -ra excluded_array <<< "$excluded"
-            for excluded_worker in "${excluded_array[@]}"; do
-              if [ "$excluded_worker" == "${{ matrix.worker }}" ]; then
-                echo "Worker ${{ matrix.worker }} is excluded, skipping..."
-                echo "skip=true" >> $GITHUB_OUTPUT
-                exit 0
-              fi
-            done
-          fi
-          echo "skip=false" >> $GITHUB_OUTPUT
       - name: Download workspace
-        if: steps.check_excluded.outputs.skip == 'false'
         uses: actions/download-artifact@v4
         with:
-          name: workspace-${{ needs.setup.outputs.timestamp }}
+          name: workspace-${{ needs.setup.outputs.run_id }}
           path: ./
       - name: Set up Python
-        if: steps.check_excluded.outputs.skip == 'false'
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
       - name: Install dependencies
-        if: steps.check_excluded.outputs.skip == 'false'
         run: |
           python -m pip install --upgrade pip
           pip install xxhash pycryptodome
-      - name: Run bruteforce with timeout
-        if: steps.check_excluded.outputs.skip == 'false'
+      - name: Run bruteforce with timeout handling
         run: |
-          timeout 295m python bruteforce.py \
-            ${{ matrix.worker }} \
-            ${{ github.event.inputs.max_length }} \
-            ${{ github.event.inputs.start_length }} \
-            ${{ needs.setup.outputs.timestamp }}
+          # 设置5小时超时（295分钟，留5分钟保存）
+          timeout 295m python bruteforce_restartable.py \
+            --worker ${{ matrix.worker }} \
+            --max-length ${{ github.event.inputs.max_length }} \
+            --charset ${{ github.event.inputs.charset_type }} \
+            --run-id ${{ needs.setup.outputs.run_id }} \
+            --iteration ${{ needs.setup.outputs.iteration }} || \
+          (echo "Worker ${{ matrix.worker }} timed out" && exit 124)
         continue-on-error: true
-      - name: Save progress on timeout
-        if: steps.check_excluded.outputs.skip == 'false' && failure()
+        id: bruteforce
+      - name: Save timeout results
+        if: steps.bruteforce.outcome == 'failure' || steps.bruteforce.outcome == 'cancelled'
         run: |
-          echo "Worker ${{ matrix.worker }} timed out or failed, progress saved"
+          echo "Saving timeout state for worker ${{ matrix.worker }}"
+          # 确保进度文件存在
+          touch progress/timeout_${{ matrix.worker }}.txt
+          echo "Timeout at $(date)" > progress/timeout_${{ matrix.worker }}.txt
       - name: Upload results
-        if: steps.check_excluded.outputs.skip == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: results-worker-${{ matrix.worker }}-${{ needs.setup.outputs.timestamp }}
+          name: results-${{ needs.setup.outputs.run_id }}-worker-${{ matrix.worker }}
           path: |
             key_*.txt
+            worker_${{ matrix.worker }}.log
             progress/
+            excluded_keys/
           retention-days: 7
 
-  restart-manager:
+  analyze-and-restart:
     needs: [setup, bruteforce]
     runs-on: ubuntu-latest
     if: always()
+    outputs:
+      should_restart: ${{ steps.analyze.outputs.restart }}
+      excluded_keys_b64: ${{ steps.analyze.outputs.excluded_b64 }}
+      next_iteration: ${{ steps.analyze.outputs.next_iteration }}
     steps:
       - name: Download all results
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-          pattern: '*'
+          path: results
+          pattern: results-${{ needs.setup.outputs.run_id }}-*
           merge-multiple: true
-      - name: Check for found keys
-        id: check-keys
+      - name: Analyze results and prepare restart
+        id: analyze
         run: |
-          if find artifacts -name "key_*.txt" | grep -q .; then
-            echo "found=true" >> $GITHUB_OUTPUT
-            echo "🎉 Keys found:" 
-            find artifacts -name "key_*.txt" -exec echo "Key: {}" \; -exec cat {} \;
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
+          echo "=== Analysis Results ==="
+          
+          # 检查是否找到密钥
+          if find results -name "key_*.txt" | grep -q .; then
+            echo "🎉 KEY FOUND - STOPPING WORKFLOW"
+            find results -name "key_*.txt" -exec echo "Key: {}" \; -exec cat {} \;
+            echo "::warning::🔑 Valid key found! Workflow completed."
+            echo "restart=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
-      - name: Analyze timeout workers
-        id: analyze_timeout
-        run: |
-          # 找出超时的worker
-          excluded_workers=""
-          for worker in {0..19}; do
-            # 检查是否找到密钥
-            if [ ! -f "artifacts/key_$worker.txt" ]; then
-              # 检查是否有进度文件来确定是否超时
-              if compgen -G "artifacts/progress/worker_${worker}_*.pkl" > /dev/null; then
-                excluded_workers="$excluded_workers,$worker"
-                echo "Worker $worker timed out and will be excluded"
-              fi
+          
+          # 检查超时的worker
+          timeout_workers=()
+          for i in {0..19}; do
+            if [ -f "results/progress/timeout_$i.txt" ]; then
+              timeout_workers+=($i)
+              echo "Worker $i: TIMEOUT"
+            elif [ -f "results/key_$i.txt" ]; then
+              echo "Worker $i: COMPLETED (no key)"
+            elif [ -f "results/worker_$i.log" ]; then
+              echo "Worker $i: COMPLETED (no key)"
+            else
+              echo "Worker $i: UNKNOWN STATUS"
             fi
           done
-          # 移除开头的逗号
-          excluded_workers="${excluded_workers#,}"
-          echo "excluded_workers=$excluded_workers" >> $GITHUB_OUTPUT
-          echo "Timeout workers: $excluded_workers"
-      - name: Check if should continue
-        id: check_continue
-        run: |
-          if [ -n "${{ steps.analyze_timeout.outputs.excluded_workers }}" ] && [ "${{ steps.check-keys.outputs.found }}" != "true" ]; then
-            echo "continue=true" >> $GITHUB_OUTPUT
-            echo "Some workers timed out and no key found, restarting workflow..."
+          
+          # 收集所有测试过的错误密钥
+          echo "Collecting tested keys from logs..."
+          python3 << 'EOF'
+          import os
+          import re
+          
+          tested_keys = set()
+          
+          # 从日志文件中提取测试过的密钥
+          for i in range(20):
+              log_file = f"results/worker_{i}.log"
+              if os.path.exists(log_file):
+                  with open(log_file, 'r', errors='ignore') as f:
+                      content = f.read()
+                  # 提取类似 "Testing key: abc123" 的模式
+                  keys = re.findall(r'Testing key: ([^\s]+)', content)
+                  tested_keys.update(keys)
+          
+          # 保存到文件
+          with open('tested_keys.txt', 'w') as f:
+              for key in tested_keys:
+                  f.write(key + '\n')
+          
+          print(f"Collected {len(tested_keys)} tested keys")
+          EOF
+          
+          # 编码为base64用于下一次运行
+          if [ -f "tested_keys.txt" ] && [ -s "tested_keys.txt" ]; then
+            base64_encoded=$(base64 -w 0 tested_keys.txt)
+            echo "excluded_b64=$base64_encoded" >> $GITHUB_OUTPUT
+            echo "Collected $(wc -l < tested_keys.txt) keys to exclude"
           else
-            echo "continue=false" >> $GITHUB_OUTPUT
-            if [ "${{ steps.check-keys.outputs.found }}" == "true" ]; then
-              echo "Key found, workflow completed successfully!"
+            # 如果没有新密钥，使用传入的excluded_keys
+            if [ -f "results/excluded_keys/previous.txt" ]; then
+              base64_encoded=$(base64 -w 0 results/excluded_keys/previous.txt)
+              echo "excluded_b64=$base64_encoded" >> $GITHUB_OUTPUT
             else
-              echo "All workers completed without finding a key"
+              echo "excluded_b64=" >> $GITHUB_OUTPUT
             fi
           fi
-      - name: Notify found key
-        if: steps.check_continue.outputs.continue == 'false' && steps.check-keys.outputs.found == 'true'
-        run: |
-          echo "::warning::🔑 Valid key found! Workflow completed."
-      - name: Restart workflow with excluded workers
-        if: steps.check_continue.outputs.continue == 'true'
+          
+          # 决定是否重启
+          if [ ${#timeout_workers[@]} -gt 0 ]; then
+            echo "RESTARTING: ${#timeout_workers[@]} workers timed out"
+            echo "restart=true" >> $GITHUB_OUTPUT
+            next_iteration=$(( ${{ needs.setup.outputs.iteration }} + 1 ))
+            echo "next_iteration=$next_iteration" >> $GITHUB_OUTPUT
+          else
+            echo "NO RESTART: All workers completed"
+            echo "restart=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Restart workflow if needed
+        if: steps.analyze.outputs.restart == 'true'
         uses: actions/github-script@v6
         with:
           script: |
-            const { excluded_workers } = process.env;
+            const { excluded_b64, next_iteration } = process.env;
             
-            // 从进度文件中确定最大测试长度
-            let start_length = parseInt('${{ github.event.inputs.max_length }}');
+            // 等待一段时间确保所有artifact上传完成
+            await new Promise(resolve => setTimeout(resolve, 30000));
             
-            // 触发新的workflow运行，排除已经完成的worker
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -188,10 +229,14 @@ jobs:
               ref: context.ref,
               inputs: {
                 max_length: '${{ github.event.inputs.max_length }}',
-                start_length: start_length.toString(),
-                excluded_workers: excluded_workers
+                charset_type: '${{ github.event.inputs.charset_type }}',
+                excluded_keys: excluded_b64,
+                iteration: next_iteration
               }
             });
-            console.log(`Restarted workflow excluding workers: ${excluded_workers}`);
+            
+            console.log(`Restarted workflow (iteration ${next_iteration})`);
+            console.log(`Excluded keys: ${excluded_b64 ? excluded_b64.length + ' chars' : 'none'}`);
         env:
-          excluded_workers: ${{ steps.analyze_timeout.outputs.excluded_workers }}
+          excluded_b64: ${{ steps.analyze.outputs.excluded_keys_b64 }}
+          next_iteration: ${{ steps.analyze.outputs.next_iteration }}
