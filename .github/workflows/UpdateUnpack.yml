@@ -236,7 +236,7 @@ jobs:
         run: |
           cp {TableCatalog.json,MediaCatalog.json,BundlePackingInfo-iOS.json,BundlePackingInfo-Android.json} BA-Text
           cd BA-Text
-          zip -r "./日服${BA_VERSION_NAME}.zip" DBSchema ExcelTable
+          zip -r "./日服${BA_VERSION_NAME}.zip" ExcelTable
           cd
 
       - name: Prepare Assets files
@@ -254,7 +254,6 @@ jobs:
           if [ -d "BA-Assets/DBSchema" ]; then
             rm -rf "BA-Assets/DBSchema"
           fi
-          mv "BA-Text/DBSchema" "BA-Assets/DBSchema"
           if [ -d "BA-Assets/ExcelTable" ]; then
             rm -rf "BA-Assets/ExcelTable"
           fi
@@ -262,7 +261,7 @@ jobs:
 
           cd BA-Assets
 
-          for item in DBSchema ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
+          for item in ExcelTable TableCatalog.json MediaCatalog.json BundlePackingInfo-iOS.json BundlePackingInfo-Android.json; do
               if [ -e "$item" ]; then
                   if [ -d "$item" ]; then
                       find "$item" -type f | while read -r file; do
