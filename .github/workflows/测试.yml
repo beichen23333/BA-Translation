@@ -1,0 +1,195 @@
+name: Blue Archive DB Bruteforce
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_length:
+        description: 'Maximum key length to test'
+        required: false
+        default: '15'
+      start_length:
+        description: 'Start from key length'
+        required: false
+        default: '1'
+      excluded_workers:
+        description: 'Excluded worker IDs (comma separated)'
+        required: false
+        default: ''
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      timestamp: ${{ steps.timestamp.outputs.time }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+      - name: Move contents to current directory
+        run: |
+          mv BA-Unpack/* .
+          rm -rf BA-Unpack
+      - name: Download ExcelDB.db
+        run: |
+          wget https://prod-clientpatch.bluearchiveyostar.com/r86_vm4arsjw95mxfrp4m01q_2/TableBundles/ExcelDB.db -O ExcelDB.db
+      - name: Create progress directory
+        run: |
+          mkdir -p progress
+      - name: Generate timestamp
+        id: timestamp
+        run: |
+          echo "time=$(date +%s)" >> $GITHUB_OUTPUT
+      - name: Upload files for next job
+        uses: actions/upload-artifact@v3
+        with:
+          name: workspace-${{ steps.timestamp.outputs.time }}
+          path: |
+            .
+          retention-days: 7
+
+  bruteforce:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 300  # 5小时超时
+    strategy:
+      matrix:
+        worker: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+      fail-fast: false
+      max-parallel: 20
+    steps:
+      - name: Check if worker is excluded
+        id: check_excluded
+        run: |
+          excluded="${{ github.event.inputs.excluded_workers }}"
+          if [ -n "$excluded" ]; then
+            IFS=',' read -ra excluded_array <<< "$excluded"
+            for excluded_worker in "${excluded_array[@]}"; do
+              if [ "$excluded_worker" == "${{ matrix.worker }}" ]; then
+                echo "Worker ${{ matrix.worker }} is excluded, skipping..."
+                echo "skip=true" >> $GITHUB_OUTPUT
+                exit 0
+              fi
+            done
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+      - name: Download workspace
+        if: steps.check_excluded.outputs.skip == 'false'
+        uses: actions/download-artifact@v3
+        with:
+          name: workspace-${{ needs.setup.outputs.timestamp }}
+      - name: Set up Python
+        if: steps.check_excluded.outputs.skip == 'false'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        if: steps.check_excluded.outputs.skip == 'false'
+        run: |
+          python -m pip install --upgrade pip
+          pip install xxhash pycryptodome
+      - name: Run bruteforce with timeout
+        if: steps.check_excluded.outputs.skip == 'false'
+        run: |
+          timeout 295m python bruteforce.py \
+            ${{ matrix.worker }} \
+            ${{ github.event.inputs.max_length }} \
+            ${{ github.event.inputs.start_length }} \
+            ${{ needs.setup.outputs.timestamp }}
+        continue-on-error: true
+      - name: Save progress on timeout
+        if: steps.check_excluded.outputs.skip == 'false' && failure()
+        run: |
+          echo "Worker ${{ matrix.worker }} timed out or failed, progress saved"
+      - name: Upload results
+        if: steps.check_excluded.outputs.skip == 'false'
+        uses: actions/upload-artifact@v3
+        with:
+          name: results-worker-${{ matrix.worker }}-${{ needs.setup.outputs.timestamp }}
+          path: |
+            key_*.txt
+            progress/
+          retention-days: 7
+
+  restart-manager:
+    needs: [setup, bruteforce]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: Check for found keys
+        id: check-keys
+        run: |
+          if find artifacts -name "key_*.txt" | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "🎉 Keys found:" 
+            find artifacts -name "key_*.txt" -exec echo "Key: {}" \; -exec cat {} \;
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Notify found key
+        if: steps.check_continue.outputs.continue == 'false'
+        run: |
+          echo "::warning::🔑 Valid key found! Workflow completed."
+      - name: Analyze timeout workers
+        id: analyze_timeout
+        run: |
+          # 找出超时的worker
+          excluded_workers=""
+          for worker in {0..19}; do
+            if [ ! -f "artifacts/results-worker-$worker-${{ needs.setup.outputs.timestamp }}/key_$worker.txt" ]; then
+              # 检查是否有进度文件来确定是否超时
+              if [ -d "artifacts/results-worker-$worker-${{ needs.setup.outputs.timestamp }}" ]; then
+                excluded_workers="$excluded_workers,$worker"
+              fi
+            fi
+          done
+          # 移除开头的逗号
+          excluded_workers="${excluded_workers#,}"
+          echo "excluded_workers=$excluded_workers" >> $GITHUB_OUTPUT
+          echo "Timeout workers: $excluded_workers"
+      - name: Check if should continue
+        id: check_continue
+        run: |
+          if [ -n "${{ steps.analyze_timeout.outputs.excluded_workers }}" ]; then
+            echo "continue=true" >> $GITHUB_OUTPUT
+            echo "Some workers timed out, restarting workflow..."
+          else
+            echo "continue=false" >> $GITHUB_OUTPUT
+            echo "All workers completed or found key"
+          fi
+      - name: Restart workflow with excluded workers
+        if: steps.check_continue.outputs.continue == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { excluded_workers } = process.env;
+            const timestamp = '${{ needs.setup.outputs.timestamp }}';
+            
+            let max_tested_length = 1;
+            for (let worker = 0; worker < 20; worker++) {
+              if (excluded_workers.includes(worker.toString())) {
+                try {
+                  max_tested_length = parseInt('${{ github.event.inputs.max_length }}');
+                } catch (e) {
+                }
+              }
+            }
+            
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              ref: context.ref,
+              inputs: {
+                max_length: '${{ github.event.inputs.max_length }}',
+                start_length: max_tested_length.toString(),
+                excluded_workers: excluded_workers
+              }
+            });
+            console.log(`Restarted workflow excluding workers: ${excluded_workers}`);
+        env:
+          excluded_workers: ${{ steps.analyze_timeout.outputs.excluded_workers }}
