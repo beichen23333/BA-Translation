@@ -68,41 +68,81 @@ jobs:
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
         unzip -q commandlinetools-linux-9477386_latest.zip
         
-        # 创建正确的目录结构
-        mkdir -p cmdline-tools
-        mv tools cmdline-tools/latest
+        echo "=== 解压后的目录结构 ==="
+        ls -la
+        
+        # 检查实际解压出的目录名
+        if [ -d "cmdline-tools" ]; then
+          echo "找到cmdline-tools目录"
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/
+        elif [ -d "tools" ]; then
+          echo "找到tools目录"
+          mkdir -p cmdline-tools
+          mv tools cmdline-tools/latest
+        else
+          echo "检查所有文件和目录:"
+          find . -type d -name "*tool*" -o -name "*cmd*" | sort
+          # 如果以上都不存在，直接使用当前目录
+          mkdir -p cmdline-tools
+          mv * cmdline-tools/latest/ 2>/dev/null || true
+        fi
+        
+        echo "=== 最终的目录结构 ==="
+        ls -la
+        ls -la cmdline-tools/latest/ || ls -la cmdline-tools/ || echo "无法列出目录"
         
         # 设置环境变量
         echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
-        echo "$PWD/cmdline-tools/latest:$PWD/platform-tools" >> $GITHUB_PATH
+        echo "$PWD/cmdline-tools/latest/bin:$PWD/platform-tools" >> $GITHUB_PATH
         
         # 安装必要组件
         echo "安装platform-tools..."
-        yes | cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD "platform-tools" > /dev/null 2>&1 || echo "安装完成"
-        
-        echo "安装emulator..."
-        yes | cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD "emulator" > /dev/null 2>&1 || echo "安装完成"
-        
-        echo "安装platform..."
-        yes | cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD "platforms;android-30" > /dev/null 2>&1 || echo "安装完成"
-        
-        echo "安装系统镜像..."
-        yes | cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD "system-images;android-30;google_apis;x86_64" > /dev/null 2>&1 || echo "安装完成"
-        
-        echo "Android SDK设置完成"
+        if [ -f "cmdline-tools/latest/bin/sdkmanager" ]; then
+          yes | cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD "platform-tools" > /dev/null 2>&1 || echo "安装完成"
+        else
+          # 尝试其他可能的路径
+          find . -name "sdkmanager" -type f | head -1
+          echo "尝试直接安装组件..."
+          wget -q https://dl.google.com/android/repository/platform-tools-latest-linux.zip
+          unzip -q platform-tools-latest-linux.zip
+        fi
         
     - name: Create and start emulator
       run: |
         echo "创建模拟器..."
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager create avd -n test -k "system-images;android-30;google_apis;x86_64" -d pixel_4 --force
+        # 使用简化方法创建模拟器
+        mkdir -p $HOME/.android/avd
+        cat > $HOME/.android/avd/test.ini << 'EOF'
+        avd.ini.encoding=UTF-8
+        path=$HOME/.android/avd/test.avd
+        path.rel=avd/test.avd
+        target=android-30
+        EOF
+        
+        mkdir -p $HOME/.android/avd/test.avd
+        cat > $HOME/.android/avd/test.avd/config.ini << 'EOF'
+        AvdId=test
+        avd.ini.encoding=UTF-8
+        hw.cpu.arch=x86_64
+        hw.device.manufacturer=Google
+        hw.device.name=pixel_4
+        image.sysdir.1=system-images/android-30/google_apis/x86_64/
+        tag.id=google_apis
+        tag.display=Google APIs
+        hw.lcd.density=440
+        hw.lcd.height=2280
+        hw.lcd.width=1080
+        EOF
         
         echo "启动模拟器..."
-        $ANDROID_SDK_ROOT/emulator/emulator -avd test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect &
+        # 直接使用emulator命令
+        emulator -avd test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect &
         EMULATOR_PID=$!
         
         echo "等待模拟器启动..."
         # 等待adb设备连接
-        timeout 120 bash -c 'until adb devices | grep -q "device$"; do sleep 5; echo "等待设备连接..."; done'
+        timeout 120 bash -c 'until adb devices | grep -q "device$"; do sleep 5; echo "等待设备连接..."; adb start-server; done'
         
         echo "模拟器状态:"
         adb devices
