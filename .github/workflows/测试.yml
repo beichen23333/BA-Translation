@@ -22,44 +22,68 @@ jobs:
           unzip \
           openjdk-11-jdk \
           python3 \
-          python3-pip \
-          docker.io
+          python3-pip
 
-    - name: Start Docker service
+    - name: Clone BA-Unpack repository
       run: |
-        sudo systemctl start docker
-        sudo docker --version
+        git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+        mv BA-Unpack/* .
+        rm -rf BA-Unpack
 
-    - name: Start Redroid emulator
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install requirements
       run: |
-        echo "启动Redroid容器..."
-        sudo docker run -d \
-          --privileged \
-          -v ~/data11:/data \
-          -p 5555:5555 \
-          --name redroid \
-          redroid/redroid:11.0.0-latest \
-          androidboot.hardware=redroid \
-          androidboot.selinux=permissive
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt requests UnityPy
         
-        echo "等待容器启动..."
+    - name: Extract XAPK
+      run: |
+        echo "运行提取脚本..."
+        python3 setup_apk.py
+        
+        echo "=== 提取结果 ==="
+        find Temp -type f -name "*.apk" | head -10
+        
+    - name: Repack APK
+      run: |
+        echo "重新打包APK..."
+        python3 repack_apk.py
+        ls -la *.apk || echo "未找到APK文件"
+        
+    - name: Use Android emulator without Docker
+      run: |
+        echo "设置Android模拟器环境..."
+        
+        # 安装Android SDK和模拟器
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip -d android-sdk
+        export ANDROID_SDK_ROOT=$PWD/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/bin
+        
+        # 接受许可证
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        
+        # 安装平台工具和模拟器
+        sdkmanager "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;google_apis;x86_64"
+        
+        # 创建AVD
+        echo "no" | avdmanager create avd -n test -k "system-images;android-30;google_apis;x86_64" -d "pixel_4" -f
+        
+        # 启动模拟器
+        $ANDROID_SDK_ROOT/emulator/emulator -avd test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect &
+        EMULATOR_PID=$!
+        
+        echo "等待模拟器启动..."
+        adb wait-for-device
         sleep 30
         
-        echo "检查容器状态..."
-        sudo docker ps -a
-        
-        echo "尝试连接ADB..."
-        adb disconnect
-        adb kill-server
-        adb start-server
-        adb connect localhost:5555
-        
-        echo "等待设备上线..."
-        timeout 30 bash -c 'while [[ "$(adb devices | grep -c "device$")" -eq 0 ]]; do sleep 2; adb connect localhost:5555; done'
-        
-        echo "设备状态:"
+        # 检查设备状态
         adb devices
-        adb wait-for-device
+        adb shell getprop ro.boot.completed
         
     - name: Install APK
       run: |
@@ -76,16 +100,19 @@ jobs:
     - name: Setup Frida
       run: |
         echo "设置Frida..."
-        wget -q https://github.com/frida/frida/releases/download/16.1.8/frida-server-16.1.8-android-arm64.xz
-        unxz frida-server-16.1.8-android-arm64.xz
-        adb push frida-server-16.1.8-android-arm64 /data/local/tmp/frida-server
+        # 下载x86_64版本的frida-server（匹配模拟器架构）
+        wget -q https://github.com/frida/frida/releases/download/16.1.8/frida-server-16.1.8-android-x86_64.xz
+        unxz frida-server-16.1.8-android-x86_64.xz
+        adb push frida-server-16.1.8-android-x86_64 /data/local/tmp/frida-server
         adb shell "chmod 755 /data/local/tmp/frida-server"
         adb shell "nohup /data/local/tmp/frida-server > /dev/null 2>&1 &"
         sleep 10
         
+        # 验证Frida安装
         pip3 install frida-tools
+        frida-ps -U || echo "Frida连接测试失败，继续..."
         
-    - name: Run hook
+    - name: Create and run hook
       run: |
         cat > hook.js << 'EOF'
         Java.perform(function() {
@@ -112,29 +139,43 @@ jobs:
                         return this.set_EncryptedSqlCipherKey(value);
                     };
                     
-                } catch(e) { console.log("Error: " + e); }
-            }, 5000);
+                } catch(e) { 
+                    console.log("Hook错误: " + e);
+                    console.log("堆栈: " + e.stack);
+                }
+            }, 10000); // 增加等待时间
         });
         EOF
         
+        echo "启动游戏..."
         adb shell am start -n com.yostarjp.bluearchive/com.yostarjp.bluearchive.MxUnityPlayerActivity
         sleep 30
-        timeout 300 frida -U -l hook.js -f com.yostarjp.bluearchive --no-pause || echo "完成"
+        
+        echo "运行Hook..."
+        timeout 300 frida -U -l hook.js -f com.yostarjp.bluearchive --no-pause || echo "Hook执行完成"
         
     - name: Collect results
       run: |
-        adb pull /sdcard/license.txt ./ || echo "无license"
-        adb pull /sdcard/key.txt ./ || echo "无key"
+        echo "收集结果..."
+        adb pull /sdcard/license.txt ./ || echo "未捕获license"
+        adb pull /sdcard/key.txt ./ || echo "未捕获key"
         
-        echo "=== 结果 ==="
-        [ -f "license.txt" ] && cat license.txt || echo "无license数据"
-        [ -f "key.txt" ] && cat key.txt || echo "无key数据"
+        echo "=== Hook结果 ==="
+        [ -f "license.txt" ] && echo "✅ EncryptedSqlCipherLicense捕获成功" && cat license.txt || echo "❌ 未捕获到license"
+        [ -f "key.txt" ] && echo "✅ EncryptedSqlCipherKey捕获成功" && cat key.txt || echo "❌ 未捕获到key"
         
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: bluearchive-results
+        name: bluearchive-hook-results
         path: |
           license.txt
           key.txt
+          bluearchive_repacked.apk
         retention-days: 7
+        
+    - name: Cleanup
+      run: |
+        # 停止模拟器
+        pkill -f emulator || true
+        adb kill-server || true
