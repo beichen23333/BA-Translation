@@ -22,79 +22,68 @@ jobs:
           unzip \
           openjdk-11-jdk \
           python3 \
-          python3-pip
+          python3-pip \
+          docker.io
 
-    - name: Clone repository
+    - name: Start Docker service
       run: |
-        git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
-        mv BA-Unpack/* .
-        rm -rf BA-Unpack
+        sudo systemctl start docker
+        sudo docker --version
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install requirements
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt requests UnityPy
-        
-    - name: Extract XAPK
-      run: |
-        echo "运行提取脚本..."
-        python3 setup_apk.py
-        
-        echo "=== 提取结果 ==="
-        find Temp -type f -name "*.apk" | head -10
-        
-    - name: Repack APK
-      run: |
-        echo "重新打包APK..."
-        python3 repack_apk.py
-        ls -la *.apk || echo "未找到APK文件"
-        
-    - name: Start Android emulator (Redroid)
+    - name: Start Redroid emulator
       run: |
         echo "启动Redroid容器..."
-        docker run -itd --rm \
+        sudo docker run -d \
           --privileged \
-          --pull always \
           -v ~/data11:/data \
           -p 5555:5555 \
           --name redroid \
-          redroid/redroid:11.0.0-latest
+          redroid/redroid:11.0.0-latest \
+          androidboot.hardware=redroid \
+          androidboot.selinux=permissive
         
-        echo "等待模拟器启动..."
+        echo "等待容器启动..."
         sleep 30
         
-        echo "连接ADB..."
+        echo "检查容器状态..."
+        sudo docker ps -a
+        
+        echo "尝试连接ADB..."
+        adb disconnect
+        adb kill-server
+        adb start-server
         adb connect localhost:5555
+        
+        echo "等待设备上线..."
+        timeout 30 bash -c 'while [[ "$(adb devices | grep -c "device$")" -eq 0 ]]; do sleep 2; adb connect localhost:5555; done'
+        
+        echo "设备状态:"
         adb devices
         adb wait-for-device
         
     - name: Install APK
       run: |
+        echo "安装APK..."
         if [ -f "bluearchive_repacked.apk" ]; then
           adb install bluearchive_repacked.apk
         else
           find Temp -name "*.apk" -exec adb install {} \;
         fi
         
+        echo "已安装包:"
         adb shell pm list packages | grep -i bluearchive
         
     - name: Setup Frida
       run: |
-        echo "下载Frida..."
+        echo "设置Frida..."
         wget -q https://github.com/frida/frida/releases/download/16.1.8/frida-server-16.1.8-android-arm64.xz
         unxz frida-server-16.1.8-android-arm64.xz
-        
-        echo "安装Frida..."
         adb push frida-server-16.1.8-android-arm64 /data/local/tmp/frida-server
         adb shell "chmod 755 /data/local/tmp/frida-server"
         adb shell "nohup /data/local/tmp/frida-server > /dev/null 2>&1 &"
+        sleep 10
         
-        pip install frida-tools
+        pip3 install frida-tools
         
     - name: Run hook
       run: |
@@ -146,8 +135,6 @@ jobs:
       with:
         name: bluearchive-results
         path: |
-          bluearchive_repacked.apk
           license.txt
           key.txt
-          Temp/
         retention-days: 7
