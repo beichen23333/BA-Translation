@@ -14,11 +14,9 @@ else
     APK_VERSION_NAME=$(grep -o '"APKVersionName": *"[^"]*' "$INFO_JSON_FILE" | head -1 | sed 's/.*"APKVersionName": *"//')
 fi
 
-# 构建版本字符串
 last_seg() { basename "$1"; }
 BUILD_VERSION="${APK_VERSION_NAME}-${APK_VERSION_CODE}($(last_seg "$ADDRESSABLE_CATALOG_URL"))"
 
-# 输出到GITHUB_OUTPUT或标准输出
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "BA_VERSION_NAME=$BUILD_VERSION" >> "$GITHUB_OUTPUT"
 else
