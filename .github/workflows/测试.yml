@@ -23,7 +23,25 @@ jobs:
           openjdk-11-jdk \
           python3 \
           python3-pip
-          
+
+    - name: Clone repository
+      run: |
+        git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+
+    - name: Move contents to current directory
+      run: |
+        mv BA-Unpack/* .
+        rm -rf BA-Unpack
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install requirements
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
     - name: Install Python dependencies
       run: |
         pip3 install requests
