@@ -36,13 +36,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: Update jp server
-        run: python update/update_urls_jp.py info.json
+        run: python update_urls_jp.py info.json
 
       - name: Update cn server
-        run: python update/update_urls_cn.py info.json
+        run: python update_urls_cn.py info.json
 
       - name: Update gl server
-        run: python update/update_urls_gl.py info.json
+        run: python update_urls_gl.py info.json
 
       - name: Check if ba.env was modified
         run: |
