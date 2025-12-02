@@ -44,7 +44,7 @@ jobs:
       - name: Update gl server
         run: python update_urls_gl.py info.json
 
-      - name: Check if ba.env was modified
+      - name: Check if info.json was modified
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
@@ -53,11 +53,21 @@ jobs:
             echo "No updates detected, skip the submission."
             echo "update_detected=false" >> $GITHUB_ENV
           else
-            echo "Detected a URL update for the Yostart server, updating the ba.env sever address..."
+            git diff --cached info.json > changes.diff
+            if grep -q 'CN' changes.diff; then
+              echo "CN region was updated"
+            fi
+            if grep -q 'JP' changes.diff; then
+              echo "JP region was updated"
+            fi
+            if grep -q 'GL' changes.diff; then
+              echo "GL region was updated"
+            fi
+            echo "Detected changes in info.json, updating the server addresses..."
             echo "update_detected=true" >> $GITHUB_ENV
           fi
 
-      - name: Commit and push changes if ba.env was modified
+      - name: Commit and push changes if info.json was modified
         if: env.update_detected == 'true'
         run: |
           git commit -m "更新悠星服务器URL"
