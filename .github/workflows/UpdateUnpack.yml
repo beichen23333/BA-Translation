@@ -81,7 +81,8 @@ jobs:
               SERVERS=("JP")
             fi
             
-            SERVERS_JSON=$(echo -n "${SERVERS[@]}" | jq -R -s -c 'split(" ")')
+            # 确保输出正确的 JSON 数组格式
+            SERVERS_JSON=$(printf '%s\n' "${SERVERS[@]}" | jq -R -n '[inputs]' | jq -c .)
           elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             CLIENT_PAYLOAD='${{ toJSON(github.event.client_payload) }}'
             if [ "$CLIENT_PAYLOAD" != "null" ] && [ -n "$CLIENT_PAYLOAD" ]; then
@@ -105,8 +106,14 @@ jobs:
           VERSIONS="{}"
           FLATDATA_VERSIONS="{}"
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 使用 jq 安全地解析 JSON 数组
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
           echo "Servers to process: $SERVERS"
+          
+          # 如果 SERVERS 是空字符串，设置默认值
+          if [ -z "$SERVERS" ]; then
+            SERVERS="JP"
+          fi
           
           while IFS= read -r SERVER; do
             if [ -n "$SERVER" ]; then
@@ -140,7 +147,11 @@ jobs:
           RUN_FLAGS="{}"
           SETUP_FLATDATA_FLAGS="{}"
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 安全地解析服务器列表
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
+          if [ -z "$SERVERS" ]; then
+            SERVERS="JP"
+          fi
           
           while IFS= read -r SERVER; do
             if [ -n "$SERVER" ]; then
@@ -179,11 +190,41 @@ jobs:
       - name: Set final outputs
         id: set-outputs
         run: |
-          echo "matrix=${{ steps.determine-servers.outputs.matrix }}" >> $GITHUB_OUTPUT
-          echo "versions=${{ steps.get-versions.outputs.versions }}" >> $GITHUB_OUTPUT
-          echo "flatdata-versions=${{ steps.get-versions.outputs.flatdata-versions }}" >> $GITHUB_OUTPUT
-          echo "run-flags=${{ steps.check-files.outputs.run-flags }}" >> $GITHUB_OUTPUT
-          echo "setup-flatdata-flags=${{ steps.check-files.outputs.setup-flatdata-flags }}" >> $GITHUB_OUTPUT
+          MATRIX_OUTPUT='${{ steps.determine-servers.outputs.matrix }}'
+          # 验证 matrix 输出是否为有效的 JSON
+          if echo "$MATRIX_OUTPUT" | jq -e . >/dev/null 2>&1; then
+            echo "matrix=$MATRIX_OUTPUT" >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"JP\"]" >> $GITHUB_OUTPUT
+          fi
+          
+          VERSIONS_OUTPUT='${{ steps.get-versions.outputs.versions }}'
+          if echo "$VERSIONS_OUTPUT" | jq -e . >/dev/null 2>&1; then
+            echo "versions=$VERSIONS_OUTPUT" >> $GITHUB_OUTPUT
+          else
+            echo "versions={\"JP\":\"\"}" >> $GITHUB_OUTPUT
+          fi
+          
+          FLATDATA_VERSIONS_OUTPUT='${{ steps.get-versions.outputs.flatdata-versions }}'
+          if echo "$FLATDATA_VERSIONS_OUTPUT" | jq -e . >/dev/null 2>&1; then
+            echo "flatdata-versions=$FLATDATA_VERSIONS_OUTPUT" >> $GITHUB_OUTPUT
+          else
+            echo "flatdata-versions={\"JP\":\"\"}" >> $GITHUB_OUTPUT
+          fi
+          
+          RUN_FLAGS_OUTPUT='${{ steps.check-files.outputs.run-flags }}'
+          if echo "$RUN_FLAGS_OUTPUT" | jq -e . >/dev/null 2>&1; then
+            echo "run-flags=$RUN_FLAGS_OUTPUT" >> $GITHUB_OUTPUT
+          else
+            echo "run-flags={\"JP\":\"true\"}" >> $GITHUB_OUTPUT
+          fi
+          
+          SETUP_FLATDATA_FLAGS_OUTPUT='${{ steps.check-files.outputs.setup-flatdata-flags }}'
+          if echo "$SETUP_FLATDATA_FLAGS_OUTPUT" | jq -e . >/dev/null 2>&1; then
+            echo "setup-flatdata-flags=$SETUP_FLATDATA_FLAGS_OUTPUT" >> $GITHUB_OUTPUT
+          else
+            echo "setup-flatdata-flags={\"JP\":\"false\"}" >> $GITHUB_OUTPUT
+          fi
 
   Table:
     runs-on: ubuntu-latest
@@ -215,53 +256,53 @@ jobs:
           fi
 
       - name: Skip if not needed
-        if: steps.check-run.outputs.should-run == 'false'
+        if: steps.check-run.outputs.should_run == 'false'
         run: |
           echo "Skipping execution for server ${{ matrix.server }}"
           exit 0
 
       - name: Checkout code
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         uses: actions/checkout@v4
         with:
           submodules: false
 
       - name: Clone repository
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
 
       - name: Move contents to current directory
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           mv BA-Unpack/* .
           rm -rf BA-Unpack
 
       - name: Set up Python 3.13
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
       - name: Install requirements
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Login
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
       - name: Clone BA-FlatData
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git
 
       - name: Check for existing FlatData zip
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         id: check-flatdata-zip
         run: |
           if [ -f "BA-FlatData/${SERVER}${BA_VERSION_NAME}.zip" ]; then
@@ -273,7 +314,7 @@ jobs:
           fi
 
       - name: Setup FlatData conditionally
-        if: steps.check-run.outputs.should-run == 'true' && fromJSON(needs.setup.outputs.setup-flatdata-flags)[matrix.server] == 'false' && steps.check-flatdata-zip.outputs.zip-exists == 'false'
+        if: steps.check-run.outputs.should_run == 'true' && fromJSON(needs.setup.outputs.setup-flatdata-flags)[matrix.server] == 'false' && steps.check-flatdata-zip.outputs.zip-exists == 'false'
         run: |
           if [ "$SERVER" = "CN" ]; then
             git clone --depth 1 --branch "CN" https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git flatdata-cn
@@ -287,18 +328,18 @@ jobs:
           python setup_flatdata.py $SERVER
 
       - name: Downloads Table files and run MemoryPackRepacker
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           chmod +x update/update_table.sh
           ./update/update_table.sh $SERVER
 
       - name: Create temporary directory for unpacked files
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           mkdir -p temp_unpacked
 
       - name: Decrypt database for JP server
-        if: steps.check-run.outputs.should-run == 'true' && matrix.server == 'JP'
+        if: steps.check-run.outputs.should_run == 'true' && matrix.server == 'JP'
         run: |
           DB_FILE="./downloads/TableBundles/ExcelDB.db"
           if [ -f "$DB_FILE" ]; then
@@ -326,12 +367,12 @@ jobs:
           fi
 
       - name: Unpack ExcelDB.db and Excel.zip to temporary directory
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         run: |
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./temp_unpacked/FlatData config.json temp_text $SERVER
 
       - name: Prepare FlatData zip conditionally
-        if: steps.check-run.outputs.should-run == 'true' && fromJSON(needs.setup.outputs.setup-flatdata-flags)[matrix.server] == 'false' && steps.check-flatdata-zip.outputs.zip-exists == 'false'
+        if: steps.check-run.outputs.should_run == 'true' && fromJSON(needs.setup.outputs.setup-flatdata-flags)[matrix.server] == 'false' && steps.check-flatdata-zip.outputs.zip-exists == 'false'
         run: |
           mkdir -p temp_flatdata_output
           cd ./temp_unpacked/FlatData/
@@ -339,7 +380,7 @@ jobs:
           cd
 
       - name: Check for existing Text zip
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         id: check-text-zip
         run: |
           if [ -f "${SERVER}${BA_VERSION_NAME}.zip" ]; then
@@ -351,7 +392,7 @@ jobs:
           fi
 
       - name: Prepare Text zip conditionally
-        if: steps.check-run.outputs.should-run == 'true' && steps.check-text-zip.outputs.text-zip-exists == 'false'
+        if: steps.check-run.outputs.should_run == 'true' && steps.check-text-zip.outputs.text-zip-exists == 'false'
         run: |
           mkdir -p temp_text_output
           
@@ -364,7 +405,7 @@ jobs:
           cd
 
       - name: Check for existing Catalog zip
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         id: check-catalog-zip
         run: |
           if [ -f "${SERVER}Catalog${BA_VERSION_NAME}.zip" ]; then
@@ -376,7 +417,7 @@ jobs:
           fi
 
       - name: Prepare Catalog zip conditionally
-        if: steps.check-run.outputs.should-run == 'true' && steps.check-catalog-zip.outputs.catalog-zip-exists == 'false'
+        if: steps.check-run.outputs.should_run == 'true' && steps.check-catalog-zip.outputs.catalog-zip-exists == 'false'
         run: |
           if [ -f "TableCatalog.json" ] && [ -f "MediaCatalog.json" ] && [ -f "BundlePackingInfo-iOS.json" ] && [ -f "BundlePackingInfo-Android.json" ]; then
             mkdir -p temp_flatdata_output
@@ -384,7 +425,7 @@ jobs:
           fi
 
       - name: Upload Table artifacts
-        if: steps.check-run.outputs.should-run == 'true'
+        if: steps.check-run.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: table-changes-${{ matrix.server }}
@@ -413,7 +454,8 @@ jobs:
           SERVERS_JSON='${{ needs.setup.outputs.matrix }}'
           echo "Servers JSON: $SERVERS_JSON"
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 安全地解析服务器列表
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
           RUN_FLAGS='${{ needs.setup.outputs.run-flags }}'
           
           while IFS= read -r SERVER; do
@@ -443,7 +485,8 @@ jobs:
           FLATDATA_HAS_CHANGES=false
           TEXT_HAS_CHANGES=false
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 安全地解析服务器列表
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
           
           while IFS= read -r SERVER; do
             if [ -n "$SERVER" ]; then
@@ -501,7 +544,8 @@ jobs:
           SERVERS_JSON='${{ needs.setup.outputs.matrix }}'
           VERSIONS_JSON='${{ needs.setup.outputs.versions }}'
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 安全地解析服务器列表
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
           RUN_FLAGS='${{ needs.setup.outputs.run-flags }}'
           
           while IFS= read -r SERVER; do
@@ -542,7 +586,8 @@ jobs:
           VERSIONS_JSON='${{ needs.setup.outputs.versions }}'
           SETUP_FLATDATA_FLAGS_JSON='${{ needs.setup.outputs.setup-flatdata-flags }}'
           
-          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]')
+          # 安全地解析服务器列表
+          SERVERS=$(echo "$SERVERS_JSON" | jq -r '.[]' 2>/dev/null || echo "JP")
           
           while IFS= read -r SERVER; do
             if [ -n "$SERVER" ]; then
