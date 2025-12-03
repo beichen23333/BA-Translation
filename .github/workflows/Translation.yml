@@ -77,4 +77,4 @@ jobs:
           git add .
 
           git commit -m "Commit translation."
-          git push origin
+          git push origin JP
