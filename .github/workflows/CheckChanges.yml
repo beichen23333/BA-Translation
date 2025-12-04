@@ -94,7 +94,7 @@ jobs:
           echo "Current info.json content:"
           cat info.json
           echo "Running version.sh on current info.json:"
-          bash version.sh info.json >> "$GITHUB_OUTPUT"
+          bash version.sh JP info.json >> "$GITHUB_OUTPUT"
 
       - name: Run update
         run: |
