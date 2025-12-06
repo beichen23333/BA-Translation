@@ -18,12 +18,12 @@ jobs:
 
       - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BA-Unpack.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git
 
       - name: Move contents to current directory
         run: |
-          mv BA-Unpack/* .
-          rm -rf BA-Unpack
+          mv BlueArchive-Translation/* .
+          rm -rf BlueArchive-Translation
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
