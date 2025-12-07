@@ -38,9 +38,6 @@ jobs:
       - name: Update jp server
         run: python -m update.update_urls_jp info.json
 
-      - name: Update cn server
-        run: python -m update.update_urls_cn info.json
-
       - name: Update gl server
         run: python -m update.update_urls_gl info.json
 
