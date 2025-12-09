@@ -457,46 +457,108 @@ jobs:
         run: |
           cd workspace
           
-          for server in JP GL CN; do
-            if [ "${{ needs.setup.outputs[format('{0}-enabled', server)] }}" = "true" ]; then
-              echo "Processing $server server..."
-              VERSION="${{ needs.setup.outputs[format('{0}-version', server)] }}"
-              
-              if [ -d "../artifacts/table-changes-${server}" ]; then
-                echo "Merging table changes for $server"
-                rsync -av ../artifacts/table-changes-${server}/ba-text-${server}/ ba-text-${server}/ || true
-                rsync -av ../artifacts/table-changes-${server}/ba-flatdata/ ba-flatdata/ || true
-              fi
-              
-              echo "Committing BA-Text for $server"
-              cd ba-text-${server}
-              git add .
-              if ! git diff --staged --quiet; then
-                git commit -m "Update ${server} Text files - version $VERSION"
-                git push origin ${server}
-                echo "BA-Text $server commit completed"
-              else
-                echo "No changes to commit for BA-Text $server"
-              fi
-              cd ..
-              
-              echo "Committing BA-FlatData for $server"
-              cd ba-flatdata
-              git add .
-              if ! git diff --staged --quiet; then
-                git commit -m "Update ${server} FlatData - version $VERSION"
-                git push origin
-                echo "BA-FlatData $server commit completed"
-              else
-                echo "No changes to commit for BA-FlatData $server"
-              fi
-              cd ..
-              
-              echo "Completed processing $server server"
-            else
-              echo "Skipping $server server (disabled)"
+          # 简单而快速，不会报错，能不动就别动了，能运行就行别事那么多
+          if [ "${{ needs.setup.outputs.JP-enabled }}" = "true" ]; then
+            echo "Processing JP server..."
+            VERSION="${{ needs.setup.outputs.JP-version }}"
+            if [ -d "../artifacts/table-changes-JP" ]; then
+              echo "Merging table changes for JP"
+              rsync -av ../artifacts/table-changes-JP/ba-text-JP/ ba-text-JP/ || true
+              rsync -av ../artifacts/table-changes-JP/ba-flatdata/ ba-flatdata/ || true
             fi
-          done
+            
+            echo "Committing BA-Text for JP"
+            cd ba-text-JP
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update JP Text files - version $VERSION"
+              git push origin JP
+              echo "BA-Text JP commit completed"
+            else
+              echo "No changes to commit for BA-Text JP"
+            fi
+            cd ..
+            
+            echo "Committing BA-FlatData for JP"
+            cd ba-flatdata
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update JP FlatData - version $VERSION"
+              git push origin
+              echo "BA-FlatData JP commit completed"
+            else
+              echo "No changes to commit for BA-FlatData JP"
+            fi
+            cd ..
+          fi
+          
+          if [ "${{ needs.setup.outputs.GL-enabled }}" = "true" ]; then
+            echo "Processing GL server..."
+            VERSION="${{ needs.setup.outputs.GL-version }}"
+            if [ -d "../artifacts/table-changes-GL" ]; then
+              echo "Merging table changes for GL"
+              rsync -av ../artifacts/table-changes-GL/ba-text-GL/ ba-text-GL/ || true
+              rsync -av ../artifacts/table-changes-GL/ba-flatdata/ ba-flatdata/ || true
+            fi
+            
+            echo "Committing BA-Text for GL"
+            cd ba-text-GL
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update GL Text files - version $VERSION"
+              git push origin GL
+              echo "BA-Text GL commit completed"
+            else
+              echo "No changes to commit for BA-Text GL"
+            fi
+            cd ..
+            
+            echo "Committing BA-FlatData for GL"
+            cd ba-flatdata
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update GL FlatData - version $VERSION"
+              git push origin
+              echo "BA-FlatData GL commit completed"
+            else
+              echo "No changes to commit for BA-FlatData GL"
+            fi
+            cd ..
+          fi
+          
+          if [ "${{ needs.setup.outputs.CN-enabled }}" = "true" ]; then
+            echo "Processing CN server..."
+            VERSION="${{ needs.setup.outputs.CN-version }}"
+            if [ -d "../artifacts/table-changes-CN" ]; then
+              echo "Merging table changes for CN"
+              rsync -av ../artifacts/table-changes-CN/ba-text-CN/ ba-text-CN/ || true
+              rsync -av ../artifacts/table-changes-CN/ba-flatdata/ ba-flatdata/ || true
+            fi
+            
+            echo "Committing BA-Text for CN"
+            cd ba-text-CN
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update CN Text files - version $VERSION"
+              git push origin CN
+              echo "BA-Text CN commit completed"
+            else
+              echo "No changes to commit for BA-Text CN"
+            fi
+            cd ..
+            
+            echo "Committing BA-FlatData for CN"
+            cd ba-flatdata
+            git add .
+            if ! git diff --staged --quiet; then
+              git commit -m "Update CN FlatData - version $VERSION"
+              git push origin
+              echo "BA-FlatData CN commit completed"
+            else
+              echo "No changes to commit for BA-FlatData CN"
+            fi
+            cd ..
+          fi
 
       - name: Cleanup
         run: rm -rf artifacts workspace
