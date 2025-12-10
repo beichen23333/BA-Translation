@@ -364,8 +364,7 @@ jobs:
           cd ./Extracted/FlatData/
           zip -j "${BA_VERSION_NAME}.zip" *
           mv "${BA_VERSION_NAME}.zip" ../../workspace/
-          cd
-          cd ./unpacked-Text
+          cd ../../unpacked-Text
           zip -r "GL${BA_VERSION_NAME}.zip" DBSchema ExcelTable
           mv "GL${BA_VERSION_NAME}.zip" ../workspace/
           cd
