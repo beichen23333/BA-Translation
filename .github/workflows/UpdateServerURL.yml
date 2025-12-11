@@ -30,12 +30,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install SQLCipher dev libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlcipher-dev
-          pip install pysqlcipher3
-
       - name: Install requirements
         run: |
           python -m pip install --upgrade pip

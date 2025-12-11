@@ -18,11 +18,6 @@ on:
         required: false
         type: boolean
         default: false
-      db_key:
-        description: 'Database decryption key (for JP server)'
-        required: false
-        type: string
-        default: ''
   repository_dispatch:
     types: [run-deployment]
 
@@ -36,6 +31,7 @@ jobs:
       JP-enabled: ${{ steps.detect-servers.outputs.JP-enabled }}
       GL-enabled: ${{ steps.detect-servers.outputs.GL-enabled }}
       CN-enabled: ${{ steps.detect-servers.outputs.CN-enabled }}
+      db_key: ${{ steps.detect-servers.outputs.db_key }}
       JP-version: ${{ steps.get-JP-version.outputs.BA_VERSION_NAME }}
       GL-version: ${{ steps.get-GL-version.outputs.BA_VERSION_NAME }}
       CN-version: ${{ steps.get-CN-version.outputs.BA_VERSION_NAME }}
@@ -50,22 +46,6 @@ jobs:
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git
           mv BlueArchive-Translation/* .
           rm -rf BlueArchive-Translation
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install SQLCipher dev libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlcipher-dev
-          pip install pysqlcipher3
-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
 
       - name: Get JP version
         id: get-JP-version
@@ -114,6 +94,7 @@ jobs:
           echo "JP-enabled=$JP_ENABLED" >> $GITHUB_OUTPUT
           echo "GL-enabled=$GL_ENABLED" >> $GITHUB_OUTPUT
           echo "CN-enabled=$CN_ENABLED" >> $GITHUB_OUTPUT
+          echo "db_key=${{ inputs.db_key }}" >> $GITHUB_OUTPUT
 
   check-versions-jp:
     runs-on: ubuntu-latest
@@ -289,17 +270,16 @@ jobs:
           python setup_flatdata.py JP
           chmod +x update/update_table.sh
           update/update_table.sh JP
-          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData ./other/config.json ./unpacked-Text JP
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked JP --db_key "${{ needs.setup.outputs.db_key }}"
 
       - name: Prepare artifacts
         run: |
           cd ./Extracted/FlatData/
           zip -j "${BA_VERSION_NAME}.zip" *
           mv "${BA_VERSION_NAME}.zip" ../../workspace/
-          cd
-          cd ./unpacked-Text
-          zip -r "JP${BA_VERSION_NAME}.zip" DBSchema ExcelTable
-          mv "JP${BA_VERSION_NAME}.zip" ../workspace/
+          cd ../../unpacked
+          zip -r "GL${BA_VERSION_NAME}.zip" DBSchema ExcelTable
+          mv "GL${BA_VERSION_NAME}.zip" ../workspace/
           cd
 
       - name: Upload artifacts
@@ -357,14 +337,14 @@ jobs:
           python setup_flatdata.py GL
           chmod +x update/update_table.sh
           update/update_table.sh GL
-          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData ./other/config.json ./unpacked-Text GL
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked GL
 
       - name: Prepare artifacts
         run: |
           cd ./Extracted/FlatData/
           zip -j "${BA_VERSION_NAME}.zip" *
           mv "${BA_VERSION_NAME}.zip" ../../workspace/
-          cd ../../unpacked-Text
+          cd ../../unpacked
           zip -r "GL${BA_VERSION_NAME}.zip" DBSchema ExcelTable
           mv "GL${BA_VERSION_NAME}.zip" ../workspace/
           cd
@@ -429,17 +409,16 @@ jobs:
           python setup_flatdata.py CN
           chmod +x update/update_table.sh
           update/update_table.sh CN
-          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./unpacked ./Extracted/FlatData ./other/config.json ./unpacked-Text CN
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked CN
 
       - name: Prepare artifacts
         run: |
           cd ./Extracted/FlatData/
           zip -j "${BA_VERSION_NAME}.zip" *
           mv "${BA_VERSION_NAME}.zip" ../../workspace/
-          cd
-          cd ./unpacked-Text
-          zip -r "CN${BA_VERSION_NAME}.zip" DBSchema ExcelTable
-          mv "CN${BA_VERSION_NAME}.zip" ../workspace/
+          cd ../../unpacked
+          zip -r "GL${BA_VERSION_NAME}.zip" DBSchema ExcelTable
+          mv "GL${BA_VERSION_NAME}.zip" ../workspace/
           cd
 
       - name: Upload artifacts
