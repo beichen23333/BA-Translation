@@ -40,11 +40,12 @@ jobs:
 
       - name: Test
         run: |
+          pip install androguard
           python 测试.py
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: test
-          path: temp/
+          path: Temp/extracted_apks/AndroidManifest.xml
           retention-days: 1
