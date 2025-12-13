@@ -40,7 +40,6 @@ jobs:
 
       - name: Test
         run: |
-          pip install androguard
           python 测试.py
 
       - name: Upload artifacts
