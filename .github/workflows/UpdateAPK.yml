@@ -63,7 +63,8 @@ jobs:
           echo "PATH includes build-tools: $(echo $PATH | grep build-tools || echo 'No')"
 
       - name: Test
-        PATH: ${{ env.PATH }}:${{ env.ANDROID_BUILD_TOOLS }}/$(ls ${{ env.ANDROID_BUILD_TOOLS }} | head -n1)
+        env:
+          PATH: ${{ env.PATH }}:${{ env.ANDROID_BUILD_TOOLS }}/$(ls ${{ env.ANDROID_BUILD_TOOLS }} | head -n1)
         run: |
           python 测试.py
 
