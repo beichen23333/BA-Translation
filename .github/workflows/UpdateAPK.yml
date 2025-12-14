@@ -55,10 +55,3 @@ jobs:
       - name: Run extraction script
         run: |
           python 测试.py
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Test-signed
-          path: Temp/signed.apk
-          retention-days: 1
