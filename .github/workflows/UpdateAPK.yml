@@ -54,4 +54,4 @@ jobs:
 
       - name: Run extraction script
         run: |
-          python 测试.py
+          python apktool.py
