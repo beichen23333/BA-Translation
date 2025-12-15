@@ -1,0 +1,48 @@
+name: 测试
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [测试]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Clone repository
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git BlueArchive-Translation
+
+      - name: Move contents to current directory
+        run: |
+          mv BlueArchive-Translation/* .
+          rm -rf BlueArchive-Translation
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Run extraction script
+        run: |
+          chmod +x ./other/crcmanip
+          ./other/crcmanip patch 测试.txf 输出.txt 1234abcd -p -1
+          ./other/crcmanip patch SDKConfigSettings.json 输出.json ee0aa105 -p -4
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test
+          path: |
+            输出.txt
+            输出.json
+          retention-days: 1
