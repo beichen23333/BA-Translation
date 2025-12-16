@@ -42,5 +42,8 @@ jobs:
           python setup_flatdata.py JP
           chmod +x update/update_table.sh
           update/update_table.sh JP
+          chmod +x ./other/MemoryPackRepacker
+          ./other/MemoryPackRepacker deserialize media MediaCatalog.bytes MediaCatalog.json
+          ./other/MemoryPackRepacker deserialize table TableCatalog.bytes TableCatalog.json
           python build_excel_db.py ./Extracted/FlatData ./downloads/TableBundles/ExcelDB.db ./unpacked ./ExcelDB.db
           python patch_table_catalog.py
