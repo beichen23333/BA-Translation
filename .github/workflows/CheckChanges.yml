@@ -101,7 +101,7 @@ jobs:
           python tools/clean.py "BA-Text/日服${{ steps.new_ver.outputs.BA_VERSION_NAME }}.zip" other/config.json "BA-Text-Translation/日服${{ steps.new_ver.outputs.BA_VERSION_NAME }}.zip"
           python tools/update.py "BA-Text-Translation/日服${{ steps.new_ver.outputs.BA_VERSION_NAME }}.zip" "BA-Text-Translation/日服备份.zip" "BA-Text-Translation/日服备份.zip"
           python tools/back.py other/config.json "BA-Text-Translation"
-          python tools/re_extract.py "BA-Text-Translation" "BA-Text-Translation/日服备份.zip" other/config.json 10
+          python -m tools/re_extract.py "BA-Text-Translation" "BA-Text-Translation/日服备份.zip" other/config.json 10
           python tools/format.py "BA-Text/日服${{ steps.new_ver.outputs.BA_VERSION_NAME }}.zip"
 
       - name: Commit files Translation
