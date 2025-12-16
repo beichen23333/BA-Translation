@@ -1,4 +1,4 @@
-name: Unpack-Update Game Server URL
+name: Repack-Update Excel
 on:
   schedule:
     - cron: "0 * * * *"
