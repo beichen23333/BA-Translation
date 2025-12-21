@@ -23,7 +23,7 @@ jobs:
       gl_sw: ${{ steps.detect.outputs.gl }}
       cn_sw: ${{ steps.detect.outputs.cn }}
     steps:
-      - uses: actions/checkout@v4 # 拉取本仓库以读取 info.json 等
+      - uses: actions/checkout@v4
       - name: Clone Tool
         run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
           
@@ -62,8 +62,7 @@ jobs:
       matrix: 
         server: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
-      - name: Checkout Current Repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Clone Tool
         run: |
@@ -112,7 +111,10 @@ jobs:
           mkdir -p workspace
           cd Extracted/FlatData && zip -j "../../workspace/FlatData${{ steps.v.outputs.ver }}.zip" * && cd ../..
           cd unpacked && zip -r "../workspace/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
-          gh run upload --name "table-${{ matrix.server.id }}" workspace/*
+          uses: actions/upload-artifact@v4
+          with:
+            name: table-${{ matrix.server.id }}
+            path: workspace/
 
   Final:
     name: Final Commit
@@ -131,10 +133,12 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
-            gh run download --name "table-$s" --dir "art-$s" || { echo "Skip $s"; continue; }
+            gh run download ${{ github.run_id }} -n "table-$s" -D "art-$s" || { echo "Skip $s"; continue; }
+            
             git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-Text.git "txt-$s"
             rsync -av "art-$s/" "txt-$s/"
             rsync -av "art-$s/" "fd/"
+            
             cd "txt-$s" && git add . && (git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)) && cd ..
             cd fd && git add . && (git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)) && cd ..
           done
