@@ -80,6 +80,7 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         run: |
+          PYTHONUNBUFFERED: "1"
           python check.py info.json
 
       - name: Check if info.json was modified
