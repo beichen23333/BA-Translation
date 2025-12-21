@@ -122,7 +122,7 @@ jobs:
         run: |
           mkdir -p workspace/bundle_repo workspace/flatdata_repo
           cd unpacked && zip -r "../workspace/bundle_repo/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
-          cd Extracted/FlatData && zip -j "../../workspace/flatdata_repo/${{ matrix.server.id }}_FlatData_${{ steps.v.outputs.ver }}.zip" * && cd ../..
+          cd Extracted/FlatData && zip -j "../../workspace/flatdata_repo/${{ matrix.server.id }}${{ steps.v.outputs.ver }}.zip" * && cd ../..
 
       - name: Upload Artifact
         if: steps.check.outputs.run == 'true' && success()
@@ -170,7 +170,7 @@ jobs:
               rsync -av "all-artifacts/table-$s/bundle_repo/" "txt-$s/"
               cd "txt-$s"
               git add .
-              git diff --staged --quiet || (git commit -m "Update $s Assets" && git push origin $s)
+              git diff --staged --quiet || (git commit -m "Update $s Text Assets" && git push origin $s)
               cd ..
               
               git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git "fd-$s"
