@@ -89,7 +89,7 @@ jobs:
             echo "run=true" >> $GITHUB_OUTPUT
           else
             git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:roundRekt/BA-Assets-TableBundles.git check
-            [ -f "check/${{ matrix.server.id }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
+            [ -f "check/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Install System Dependencies
@@ -109,27 +109,20 @@ jobs:
           git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:roundRekt/BA-Assets-TableBundles.git BA-Text
           [ "${{ matrix.server.id }}" = "CN" ] && mkdir -p Dumps && cp BA-FlatData/dump.cs Dumps/ || true
 
-      - name: Execute Setup Script
-        if: steps.check.outputs.run == 'true'
-        run: python setup_flatdata.py ${{ matrix.server.id }}
-
-      - name: Execute Update Script
+      - name: Execute Scripts
         if: steps.check.outputs.run == 'true'
         run: |
+          python setup_flatdata.py ${{ matrix.server.id }}
           chmod +x update/update_table.sh
           update/update_table.sh ${{ matrix.server.id }}
-
-      - name: Execute Unpack Script
-        if: steps.check.outputs.run == 'true'
-        run: python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
 
       - name: Package Artifacts
         if: steps.check.outputs.run == 'true' && success()
         run: |
-          mkdir -p workspace/text_repo workspace/flatdata_repo
-          cd Extracted/FlatData && zip -j "../../workspace/text_repo/FlatData${{ steps.v.outputs.ver }}.zip" * && cd ../..
-          cd unpacked && zip -r "../workspace/text_repo/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
-          cp -r Extracted/FlatData/* workspace/flatdata_repo/
+          mkdir -p workspace/bundle_repo workspace/flatdata_repo
+          cd unpacked && zip -r "../workspace/bundle_repo/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
+          cd Extracted/FlatData && zip -j "../../workspace/flatdata_repo/${{ matrix.server.id }}_FlatData_${{ steps.v.outputs.ver }}.zip" * && cd ../..
 
       - name: Upload Artifact
         if: steps.check.outputs.run == 'true' && success()
@@ -171,31 +164,20 @@ jobs:
             exit 0
           fi
 
-          git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
               git clone --depth 1 --branch $s git@github.com:roundRekt/BA-Assets-TableBundles.git "txt-$s"
-              rsync -av "all-artifacts/table-$s/text_repo/" "txt-$s/"
+              rsync -av "all-artifacts/table-$s/bundle_repo/" "txt-$s/"
               cd "txt-$s"
               git add .
               git diff --staged --quiet || (git commit -m "Update $s Assets" && git push origin $s)
               cd ..
-              rsync -av "all-artifacts/table-$s/flatdata_repo/" "fd/"
+              
+              git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git "fd-$s"
+              rsync -av "all-artifacts/table-$s/flatdata_repo/" "fd-$s/"
+              cd "fd-$s"
+              git add .
+              git diff --staged --quiet || (git commit -m "Update $s FlatData Zip" && git push origin $s)
+              cd ..
             fi
           done
-          
-          cd fd
-          git add .
-          git diff --staged --quiet || (git commit -m "Update FlatData" && git push origin)
-          cd ..
-
-  trigger:
-    name: Trigger Media
-    needs: [setup, Final]
-    runs-on: ubuntu-latest
-    if: always() && needs.Final.result == 'success'
-    steps:
-      - run: |
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -d '{"event_type": "run-media-deployment","client_payload": {"JP_enabled": "${{ needs.setup.outputs.jp_sw }}","GL_enabled": "${{ needs.setup.outputs.gl_sw }}","CN_enabled": "${{ needs.setup.outputs.cn_sw }}"}}'
