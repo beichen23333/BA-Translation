@@ -86,6 +86,7 @@ jobs:
           fi
 
       - name: Run Main Process
+        if: steps.check.outputs.run == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
@@ -133,19 +134,16 @@ jobs:
       - name: Commit Changes
         run: |
           if [ ! -d "all-artifacts" ] || [ -z "$(ls -A all-artifacts)" ]; then
-            echo "没有发现任何成功的服务器产物，退出。"
             exit 0
           fi
 
           git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
-              echo ">>> 正在处理成功运行的服: $s"
               git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-Text.git "txt-$s"
-              
               rsync -av "all-artifacts/table-$s/" "txt-$s/"
-              rsync -av "all-artifacts/
-
+              rsync -av "all-artifacts/table-$s/" "fd/"
+              
               cd "txt-$s"
               git add .
               git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)
@@ -155,6 +153,7 @@ jobs:
               git add .
               git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)
               cd ..
+            fi
           done
 
   trigger:
