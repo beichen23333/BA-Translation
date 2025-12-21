@@ -29,7 +29,7 @@ jobs:
       - name: Clone Translation Tool
         run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
           
-      - name: Detect Trigger Source and Inputs
+      - name: Detect Trigger Source
         id: detect
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
@@ -81,6 +81,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 
+      - name: Get Version for Verification
+        id: v
+        run: |
+          # 运行脚本获取当前 Job 内部的版本号
+          bash other/version.sh ${{ matrix.server.id }} info.json
+          # 提取输出用于 check 步骤 (注意脚本会自动添加前缀)
+          echo "ver=$(cat $GITHUB_OUTPUT | grep '${{ matrix.server.id }}_BA_VERSION_NAME' | cut -d'=' -f2)" >> $GITHUB_OUTPUT
 
       - name: Verify Remote Version Status
         id: check
@@ -92,15 +99,12 @@ jobs:
             [ -f "check/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install System Libraries
+      - name: Install Dependencies
         if: steps.check.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libsqlcipher-dev
-
-      - name: Install Python Packages
-        if: steps.check.outputs.run == 'true'
-        run: pip install pysqlcipher3 sqlcipher3 -r requirements.txt
+          pip install pysqlcipher3 sqlcipher3 -r requirements.txt
 
       - name: Clone Data Repositories
         if: steps.check.outputs.run == 'true'
@@ -109,28 +113,22 @@ jobs:
           git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:roundRekt/BA-Assets-TableBundles.git BA-Text
           [ "${{ matrix.server.id }}" = "CN" ] && mkdir -p Dumps && cp BA-FlatData/dump.cs Dumps/ || true
 
-      - name: Run Setup FlatData
-        if: steps.check.outputs.run == 'true'
-        run: python setup_flatdata.py ${{ matrix.server.id }}
-
-      - name: Run Update Table Script
+      - name: Execute Unpack Scripts
         if: steps.check.outputs.run == 'true'
         run: |
+          python setup_flatdata.py ${{ matrix.server.id }}
           chmod +x update/update_table.sh
           update/update_table.sh ${{ matrix.server.id }}
+          python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
 
-      - name: Run Unpack Excel Script
-        if: steps.check.outputs.run == 'true'
-        run: python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
-
-      - name: Organize Raw Data for Artifacts
+      - name: Organize Artifacts
         if: steps.check.outputs.run == 'true' && success()
         run: |
           mkdir -p workspace/bundle_raw workspace/flatdata_raw
           cp -r unpacked/* workspace/bundle_raw/
           cp -r Extracted/FlatData/* workspace/flatdata_raw/
 
-      - name: Store Temporary Artifacts
+      - name: Upload Artifact
         if: steps.check.outputs.run == 'true' && success()
         uses: actions/upload-artifact@v4
         with:
@@ -152,9 +150,6 @@ jobs:
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-
-      - name: Configure SSH Access
-        run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -170,55 +165,114 @@ jobs:
           pattern: table-*
           merge-multiple: false
 
-      - name: Get Version
+      - name: Get and Debug Versions
+        id: get_ver
+        run: |
+          echo "=== Version Detection Start ==="
+          for s in JP GL CN; do
+            if [ -d "all-artifacts/table-$s" ]; then
+              # 执行脚本，变量会自动写入 $GITHUB_OUTPUT
+              bash tool/other/version.sh "$s" info.json
+              
+              # 为了方便调试，我们手动解析一下并打印到控制台日志
+              # 注意：脚本输出到 $GITHUB_OUTPUT 的内容在当前步骤结束前无法通过 ${{ steps... }} 读取
+              # 所以我们直接通过 grep 获取刚刚写入的内容来打印
+              BA_V=$(grep "${s}_BA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
+              FD_V=$(grep "${s}_FLATDATA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
+              
+              echo "Server ID: $s"
+              echo "  >> BA_VERSION_NAME: $BA_V"
+              echo "  >> FLATDATA_VERSION_NAME: $FD_V"
+            fi
+          done
+          echo "=== Version Detection Complete ==="
+
+  Final:
+    name: Final Commit
+    needs: [setup, process]
+    runs-on: ubuntu-latest
+    if: always() && needs.setup.outputs.matrix != '[]' && !contains(needs.process.result, 'cancelled')
+    env:
+      GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Git Identity
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+
+      - name: Prepare Translation Tool
+        run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
+
+      - name: Download Processed Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          pattern: table-*
+          merge-multiple: false
+
+      - name: Get and Debug Versions
         id: get_ver
         run: |
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
-              eval $(bash tool/other/version.sh "$s" info.json)
-              echo "${s}_BA_VERSION_NAME=$BA_VERSION_NAME" >> $GITHUB_OUTPUT
-              echo "${s}_FLATDATA_VERSION_NAME=$FLATDATA_VERSION_NAME" >> $GITHUB_OUTPUT
+              bash tool/other/version.sh "$s" info.json
+              V_BA=$(grep "${s}_BA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
+              V_FD=$(grep "${s}_FLATDATA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
+              echo "Server: $s | Text_Ver: $V_BA | Flat_Ver: $V_FD"
             fi
           done
 
-      - name: Package and Push Changes
+      - name: Package All Servers
         run: |
+          mkdir -p final-packages/text final-packages/flat
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
               case $s in
-                JP) 
-                  NAME="日服"
-                  VER_NAME="${{ steps.get_ver.outputs.JP_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.JP_FLATDATA_VERSION_NAME }}"
-                  ;;
-                GL) 
-                  NAME="国际服"
-                  VER_NAME="${{ steps.get_ver.outputs.GL_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.GL_FLATDATA_VERSION_NAME }}"
-                  ;;
-                CN) 
-                  NAME="国服"
-                  VER_NAME="${{ steps.get_ver.outputs.CN_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.CN_FLATDATA_VERSION_NAME }}"
-                  ;;
+                JP) NAME="日服"; V_T="${{ steps.get_ver.outputs.JP_BA_VERSION_NAME }}"; V_F="${{ steps.get_ver.outputs.JP_FLATDATA_VERSION_NAME }}" ;;
+                GL) NAME="国际服"; V_T="${{ steps.get_ver.outputs.GL_BA_VERSION_NAME }}"; V_F="${{ steps.get_ver.outputs.GL_FLATDATA_VERSION_NAME }}" ;;
+                CN) NAME="国服"; V_T="${{ steps.get_ver.outputs.CN_BA_VERSION_NAME }}"; V_F="${{ steps.get_ver.outputs.CN_FLATDATA_VERSION_NAME }}" ;;
               esac
-
-              git clone --depth 1 --branch $s git@github.com:roundRekt/BA-Assets-TableBundles.git "txt-$s"
-              cd "all-artifacts/table-$s/bundle_raw"
-              zip -r "../../../txt-$s/${NAME}${VER_NAME}.zip" DBSchema ExcelTable
-              cd ../../../
-              cd "txt-$s"
-              git add .
-              git diff --staged --quiet || (git commit -m "Update $NAME Text Assets ${VER_NAME}" && git push origin $s)
-              cd ..
               
-              git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git "fd-$s"
-              cd "all-artifacts/table-$s/flatdata_raw"
-              zip -j "../../../fd-$s/${NAME}${FD_NAME}.zip" *
+              echo "正在打包 $NAME..."
+              cd "all-artifacts/table-$s/bundle_raw"
+              zip -r "../../../final-packages/text/${s}_${NAME}${V_T}.zip" DBSchema ExcelTable
               cd ../../../
-              cd "fd-$s"
+              
+              cd "all-artifacts/table-$s/flatdata_raw"
+              zip -j "../../../final-packages/flat/${s}_${NAME}${V_F}.zip" *
+              cd ../../../
+            fi
+          done
+
+      - name: Commit and Push Changes
+        run: |
+          for s in JP GL CN; do
+            if [ -f final-packages/text/${s}_*.zip ]; then
+              echo "推送 $s Text 仓库..."
+              git clone --depth 1 --branch $s git@github.com:roundRekt/BA-Assets-TableBundles.git "repo-text-$s"
+              cp final-packages/text/${s}_*.zip "repo-text-$s/"
+              cd "repo-text-$s"
+              mv ${s}_*.zip $(ls ${s}_*.zip | sed "s/^${s}_//")
               git add .
-              git diff --staged --quiet || (git commit -m "Update $NAME FlatData Zip ${FD_NAME}" && git push origin $s)
+              git diff --staged --quiet || (git commit -m "Update Text Assets ($s)" && git push origin $s)
+              cd ..
+            fi
+
+            if [ -f final-packages/flat/${s}_*.zip ]; then
+              echo "推送 $s FlatData 仓库..."
+              git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git "repo-flat-$s"
+              cp final-packages/flat/${s}_*.zip "repo-flat-$s/"
+              cd "repo-flat-$s"
+              mv ${s}_*.zip $(ls ${s}_*.zip | sed "s/^${s}_//")
+              git add .
+              git diff --staged --quiet || (git commit -m "Update FlatData ($s)" && git push origin $s)
               cd ..
             fi
           done
