@@ -7,14 +7,14 @@ on:
       GL_Enabled: { type: boolean, default: false }
       CN_Enabled: { type: boolean, default: false }
   repository_dispatch:
-    types: [run-deployment]
+    types: [Unpack]
 
 permissions:
   contents: write
 
 jobs:
   setup:
-    name: Setup Environment
+    name: 设置配置
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -58,7 +58,7 @@ jobs:
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   process:
-    name: Process ${{ matrix.server.name }}
+    name: 处理${{ matrix.server.name }}
     needs: setup
     runs-on: ubuntu-latest
     strategy:
@@ -124,7 +124,7 @@ jobs:
         run: |
           mkdir -p workspace/bundle_raw workspace/flatdata_raw
           cp -r unpacked/* workspace/bundle_raw/
-          cp -r Extracted/FlatData/* workspace/flatdata_raw/
+          cp -r Extracted/* workspace/flatdata_raw/
 
       - name: Upload Artifact
         if: steps.check.outputs.run == 'true' && success()
@@ -134,7 +134,7 @@ jobs:
           path: workspace/
 
   Final:
-    name: Final Commit
+    name: 提交文件
     needs: [setup, process]
     runs-on: ubuntu-latest
     if: always() && needs.setup.outputs.matrix != '[]' && !contains(needs.process.result, 'cancelled')

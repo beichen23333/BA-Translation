@@ -1,15 +1,14 @@
-name: Update-Game Server URL
+name: Check Changes
+
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: '*/15 * * * *'
   workflow_dispatch:
-    inputs:
-permissions:
-  contents: write
 
 jobs:
-  deploy:
+  check-and-update:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,7 +17,7 @@ jobs:
 
       - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git
 
       - name: Move contents to current directory
         run: |
@@ -26,7 +25,7 @@ jobs:
           rm -rf BlueArchive-Translation
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -35,21 +34,52 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Login
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Fetch latest index.json
+        run: |
+          curl -sS -f https://prod-noticeindex.bluearchiveyostar.com/prod/index.json | jq . > index.json
+
+      - name: Check for changes
+        run: |
+          git add index.json
+          if git diff --cached --quiet; then
+            echo "No changes detected."
+          else
+            curl -X POST "https://web.archive.org/save/https://prod-noticeindex.bluearchiveyostar.com/prod/index.json" \
+               -H "Content-Type: application/x-www-form-urlencoded" \
+               --data-urlencode "url=https://prod-noticeindex.bluearchiveyostar.com/prod/index.json" \
+               --data-urlencode "capture_outlinks=on" > /dev/null
+            curl -X POST \
+               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/dispatches \
+               -d '{"event_type": "Notic"}'
+          fi
+   
+      - name: Get UTC timestamp
+        id: get_time
+        run: echo "time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Commit Changes
+        uses: qoomon/actions--create-commit@v1
+        with:
+          message: ${{ steps.get_time.outputs.time }}
+          skip-empty: true
+
+      - name: Push Changes
+        run: git push
+
       - name: Update jp server
         run: |
-          python -m update.update_urls_jp info.json
-          rm -rf Temp/
-
-      - name: Update gl server
-        run: |
-          python -m update.update_urls_gl info.json
-          rm -rf Temp/
+          python check.py info.json
 
       - name: Check if info.json was modified
         id: check-changes
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
           git add info.json
           
           JP_UPDATED=false
@@ -96,4 +126,10 @@ jobs:
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d '{"event_type": "run-deployment","client_payload": {"JP_enabled": '$JP_ENABLED',"GL_enabled": '$GL_ENABLED',"CN_enabled": '$CN_ENABLED'}}'
+            -d '{"event_type": "Unpack","client_payload": {"JP_enabled": '$JP_ENABLED',"GL_enabled": '$GL_ENABLED',"CN_enabled": '$CN_ENABLED'}}'
+
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "APK"}'

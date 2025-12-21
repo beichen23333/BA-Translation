@@ -1,7 +1,8 @@
 name: Update-Repack Excel
 on:
   workflow_dispatch:
-    inputs:
+  repository_dispatch:
+    types: [Repack]
 permissions:
   contents: write
 
