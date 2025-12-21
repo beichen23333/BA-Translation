@@ -23,8 +23,9 @@ jobs:
       gl_sw: ${{ steps.detect.outputs.gl }}
       cn_sw: ${{ steps.detect.outputs.cn }}
     steps:
+      - uses: actions/checkout@v4 # 拉取本仓库以读取 info.json 等
       - name: Clone Tool
-        run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git .
+        run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
           
       - id: detect
         run: |
@@ -41,7 +42,6 @@ jobs:
 
       - id: set-matrix
         run: |
-          # 修正 jq 参数：-n (空输入), -c (紧凑输出)
           MATRIX=$(jq -nc \
             --arg jp "${{ steps.detect.outputs.jp }}" \
             --arg gl "${{ steps.detect.outputs.gl }}" \
@@ -54,17 +54,21 @@ jobs:
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   process:
-    name: Process ${{ matrix.server.name }}
+    name: 运行${{ matrix.server.name }}
     needs: setup
     runs-on: ubuntu-latest
-    if: needs.setup.outputs.matrix != '[]'
     strategy:
-      fail-fast: false # 关键：一个服失败，其他服继续跑
+      fail-fast: false
       matrix: 
         server: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
+      - name: Checkout Current Repo
+        uses: actions/checkout@v4
+
       - name: Clone Tool
-        run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git .
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
+          cp -r tool/* . && rm -rf tool
 
       - name: Get Version
         id: v
@@ -72,7 +76,7 @@ jobs:
           V=$(bash other/version.sh ${{ matrix.server.id }} info.json | cut -d'=' -f2)
           echo "ver=$V" >> $GITHUB_OUTPUT
 
-      - name: Check Version
+      - name: Check Remote Version
         id: check
         run: |
           if [[ "${{ github.event_name }}" =~ (workflow|repository)_dispatch ]]; then
@@ -82,17 +86,29 @@ jobs:
             [ -f "check/${{ matrix.server.id }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run Process
+      - name: Install Dependencies
         if: steps.check.outputs.run == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
+
+      - name: Clone Data Repos
+        if: steps.check.outputs.run == 'true'
+        run: |
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git BA-FlatData
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git BA-Text
-          [ "${{ matrix.server.id }}" = "CN" ] && mkdir -p Dumps && mv BA-FlatData/dump.cs Dumps/ || true
+          [ "${{ matrix.server.id }}" = "CN" ] && mkdir -p Dumps && cp BA-FlatData/dump.cs Dumps/ || true
+
+      - name: Run Python Script
+        if: steps.check.outputs.run == 'true'
+        run: |
           python setup_flatdata.py ${{ matrix.server.id }}
           chmod +x update/update_table.sh && update/update_table.sh ${{ matrix.server.id }}
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
+
+      - name: Package and Upload
+        if: steps.check.outputs.run == 'true'
+        run: |
           mkdir -p workspace
           cd Extracted/FlatData && zip -j "../../workspace/FlatData${{ steps.v.outputs.ver }}.zip" * && cd ../..
           cd unpacked && zip -r "../workspace/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
@@ -116,20 +132,11 @@ jobs:
           git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
             gh run download --name "table-$s" --dir "art-$s" || { echo "Skip $s"; continue; }
-            
             git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-Text.git "txt-$s"
             rsync -av "art-$s/" "txt-$s/"
             rsync -av "art-$s/" "fd/"
-            
-            cd "txt-$s"
-            git add .
-            git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)
-            cd ..
-            
-            cd fd
-            git add .
-            git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)
-            cd ..
+            cd "txt-$s" && git add . && (git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)) && cd ..
+            cd fd && git add . && (git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)) && cd ..
           done
 
   trigger:
