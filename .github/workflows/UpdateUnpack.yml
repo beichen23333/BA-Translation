@@ -54,7 +54,7 @@ jobs:
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   process:
-    name: 运行${{ matrix.server.name }}
+    name: Process ${{ matrix.server.name }}
     needs: setup
     runs-on: ubuntu-latest
     strategy:
@@ -105,16 +105,19 @@ jobs:
           chmod +x update/update_table.sh && update/update_table.sh ${{ matrix.server.id }}
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
 
-      - name: Package and Upload
+      - name: Package Artifacts
         if: steps.check.outputs.run == 'true'
         run: |
           mkdir -p workspace
           cd Extracted/FlatData && zip -j "../../workspace/FlatData${{ steps.v.outputs.ver }}.zip" * && cd ../..
           cd unpacked && zip -r "../workspace/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
-          uses: actions/upload-artifact@v4
-          with:
-            name: table-${{ matrix.server.id }}
-            path: workspace/
+
+      - name: Upload Artifact
+        if: steps.check.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: table-${{ matrix.server.id }}
+          path: workspace/
 
   Final:
     name: Final Commit
@@ -129,18 +132,34 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          pattern: table-*
+          merge-multiple: false
+
       - name: Commit Changes
         run: |
           git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
-            gh run download ${{ github.run_id }} -n "table-$s" -D "art-$s" || { echo "Skip $s"; continue; }
+            [ ! -d "all-artifacts/table-$s" ] && { echo "Skip $s (no artifacts)"; continue; }
             
+            echo "Processing $s..."
             git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-Text.git "txt-$s"
-            rsync -av "art-$s/" "txt-$s/"
-            rsync -av "art-$s/" "fd/"
             
-            cd "txt-$s" && git add . && (git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)) && cd ..
-            cd fd && git add . && (git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)) && cd ..
+            rsync -av "all-artifacts/table-$s/" "txt-$s/"
+            rsync -av "all-artifacts/table-$s/" "fd/"
+            
+            cd "txt-$s"
+            git add .
+            git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)
+            cd ..
+            
+            cd fd
+            git add .
+            git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)
+            cd ..
           done
 
   trigger:
