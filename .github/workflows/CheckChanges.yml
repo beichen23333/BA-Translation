@@ -79,6 +79,8 @@ jobs:
       - name: Update server
         timeout-minutes: 5
         continue-on-error: true
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python check.py info.json
 
