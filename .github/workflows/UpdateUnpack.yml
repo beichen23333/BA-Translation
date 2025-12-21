@@ -179,27 +179,33 @@ jobs:
             fi
           done
 
+      - name: Get Version
+        id: get_ver
+        run: |
+          for s in JP GL CN; do
+            if [ -d "all-artifacts/table-$s" ]; then
+              bash tool/other/version.sh "$s" info.json | while read line; do
+                echo "${s}_${line}" >> "$GITHUB_OUTPUT"
+                echo "${s}_${line}" >> "$GITHUB_ENV"
+              done
+            fi
+          done
+
       - name: Package and Push Changes
         run: |
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
               case $s in
-                JP) 
-                  NAME="日服"
-                  VER_NAME="${{ steps.get_ver.outputs.JP_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.JP_FLATDATA_VERSION_NAME }}"
-                  ;;
-                GL) 
-                  NAME="国际服"
-                  VER_NAME="${{ steps.get_ver.outputs.GL_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.GL_FLATDATA_VERSION_NAME }}"
-                  ;;
-                CN) 
-                  NAME="国服"
-                  VER_NAME="${{ steps.get_ver.outputs.CN_BA_VERSION_NAME }}"
-                  FD_NAME="${{ steps.get_ver.outputs.CN_FLATDATA_VERSION_NAME }}"
-                  ;;
+                JP) NAME="日服" ;;
+                GL) NAME="国际服" ;;
+                CN) NAME="国服" ;;
               esac
+
+              VER_NAME_VAR="${s}_BA_VERSION_NAME"
+              FD_NAME_VAR="${s}_FLATDATA_VERSION_NAME"
+              
+              VER_NAME="${!VER_NAME_VAR}"
+              FD_NAME="${!FD_NAME_VAR}"
 
               git clone --depth 1 --branch $s git@github.com:roundRekt/BA-Assets-TableBundles.git "txt-$s"
               cd "all-artifacts/table-$s/bundle_raw"
