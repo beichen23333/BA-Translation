@@ -84,8 +84,9 @@ jobs:
       - name: Fetch Current Server Version
         id: v
         run: |
-          V=$(bash other/version.sh ${{ matrix.server.id }} info.json | cut -d'=' -f2)
-          echo "ver=$V" >> $GITHUB_OUTPUT
+          V_OUT=$(bash other/version.sh ${{ matrix.server.id }} info.json)
+          V_BA=$(echo "$V_OUT" | grep "BA_VERSION_NAME" | cut -d' ' -f2)
+          echo "ver=$V_BA" >> $GITHUB_OUTPUT
 
       - name: Verify Remote Version Status
         id: check
@@ -177,10 +178,11 @@ jobs:
 
       - name: Package and Push Changes
         run: |
-
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
-              VER=$(bash tool/other/version.sh $s info.json | cut -d'=' -f2)
+              V_OUT=$(bash tool/other/version.sh $s ./info.json)
+              VER_TEXT=$(echo "$V_OUT" | grep "BA_VERSION_NAME" | cut -d' ' -f2)
+              VER_FLAT=$(echo "$V_OUT" | grep "FLATDATA_VERSION_NAME" | cut -d' ' -f2)
               
               case $s in
                 JP) NAME="日服" ;;
@@ -188,26 +190,22 @@ jobs:
                 CN) NAME="国服" ;;
               esac
 
-              echo "Processing $NAME (Version: $VER)..."
-
               git clone --depth 1 --branch $s git@github.com:roundRekt/BA-Assets-TableBundles.git "txt-$s"
               cd "all-artifacts/table-$s/bundle_raw"
-              zip -r "../../../txt-$s/${NAME}${VER}.zip" DBSchema ExcelTable
+              zip -r "../../../txt-$s/${NAME}${VER_TEXT}.zip" DBSchema ExcelTable
               cd ../../../
-              
               cd "txt-$s"
               git add .
-              git diff --staged --quiet || (git commit -m "Update $s Text Assets ${VER}" && git push origin $s)
+              git diff --staged --quiet || (git commit -m "Update $NAME Text Assets ${VER_TEXT}" && git push origin $s)
               cd ..
               
               git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git "fd-$s"
               cd "all-artifacts/table-$s/flatdata_raw"
-              zip -j "../../../fd-$s/${s}${VER}.zip" *
+              zip -j "../../../fd-$s/${NAME}${VER_FLAT}.zip" *
               cd ../../../
-              
               cd "fd-$s"
               git add .
-              git diff --staged --quiet || (git commit -m "Update $s FlatData Zip ${VER}" && git push origin $s)
+              git diff --staged --quiet || (git commit -m "Update $NAME FlatData Zip ${VER_FLAT}" && git push origin $s)
               cd ..
             fi
           done
