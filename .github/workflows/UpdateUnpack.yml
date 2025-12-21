@@ -6,6 +6,7 @@ on:
       JP_Enabled: { type: boolean, default: false }
       GL_Enabled: { type: boolean, default: false }
       CN_Enabled: { type: boolean, default: false }
+      db_key: { type: string, required: false }
   repository_dispatch:
     types: [run-deployment]
 
@@ -18,32 +19,30 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       db_key: ${{ steps.detect.outputs.db_key }}
+      jp_sw: ${{ steps.detect.outputs.jp }}
+      gl_sw: ${{ steps.detect.outputs.gl }}
+      cn_sw: ${{ steps.detect.outputs.cn }}
     steps:
       - name: Clone Tool
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git .
+        run: git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git .
           
       - id: detect
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            echo "jp=${{ github.event.client_payload.JP_enabled }}" >> $GITHUB_OUTPUT
-            echo "gl=${{ github.event.client_payload.GL_enabled }}" >> $GITHUB_OUTPUT
-            echo "cn=${{ github.event.client_payload.CN_enabled }}" >> $GITHUB_OUTPUT
+            echo "jp=${{ github.event.client_payload.JP_enabled || 'false' }}" >> $GITHUB_OUTPUT
+            echo "gl=${{ github.event.client_payload.GL_enabled || 'false' }}" >> $GITHUB_OUTPUT
+            echo "cn=${{ github.event.client_payload.CN_enabled || 'false' }}" >> $GITHUB_OUTPUT
           else
             echo "jp=${{ inputs.JP_Enabled }}" >> $GITHUB_OUTPUT
             echo "gl=${{ inputs.GL_Enabled }}" >> $GITHUB_OUTPUT
             echo "cn=${{ inputs.CN_Enabled }}" >> $GITHUB_OUTPUT
           fi
-          echo "db_key=${{ secrets.DB_DECRYPT_KEY }}" >> $GITHUB_OUTPUT
+          echo "db_key=${{ inputs.db_key }}" >> $GITHUB_OUTPUT
 
       - id: set-matrix
         run: |
           MATRIX=$(jq -ncl --arg jp "${{ steps.detect.outputs.jp }}" --arg gl "${{ steps.detect.outputs.gl }}" --arg cn "${{ steps.detect.outputs.cn }}" \
-          '[
-            {id: "JP", name: "日服", enabled: $jp},
-            {id: "GL", name: "国际服", enabled: $gl},
-            {id: "CN", name: "国服", enabled: $cn}
-          ] | map(select(.enabled == "true"))')
+          '[ {id: "JP", name: "日服", enabled: $jp}, {id: "GL", name: "国际服", enabled: $gl}, {id: "CN", name: "国服", enabled: $cn} ] | map(select(.enabled == "true"))')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   process:
@@ -74,34 +73,26 @@ jobs:
             [ -f "check/${{ matrix.server.id }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Environment
+      - name: Run Process
         if: steps.check.outputs.run == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
-
-      - name: Run Process
-        if: steps.check.outputs.run == 'true'
-        run: |
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git BA-FlatData
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-Text.git BA-Text
           [ "${{ matrix.server.id }}" = "CN" ] && mkdir -p Dumps && mv BA-FlatData/dump.cs Dumps/ || true
           python setup_flatdata.py ${{ matrix.server.id }}
           chmod +x update/update_table.sh && update/update_table.sh ${{ matrix.server.id }}
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./other/config.json ./unpacked ${{ matrix.server.id }} --db_key "${{ needs.setup.outputs.db_key }}"
-
-      - name: Package & Upload
-        if: steps.check.outputs.run == 'true'
-        run: |
           mkdir -p workspace
           cd Extracted/FlatData && zip -j "../../workspace/FlatData${{ steps.v.outputs.ver }}.zip" * && cd ../..
           cd unpacked && zip -r "../workspace/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" DBSchema ExcelTable && cd ..
           gh run upload --name "table-${{ matrix.server.id }}" workspace/*
 
-  final:
+  Final:
     needs: [setup, process]
     runs-on: ubuntu-latest
-    if: always() && needs.setup.outputs.matrix != '[]'
+    if: always() && contains(needs.process.result, 'success')
     env:
       GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
     steps:
@@ -114,19 +105,19 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git fd
           for s in JP GL CN; do
-            gh run download --name "table-${s,,}" --dir "art-$s" || continue
+            gh run download --name "table-$s" --dir "art-$s" || continue
             git clone --depth 1 --branch $s https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-Text.git "txt-$s"
             rsync -av "art-$s/" "txt-$s/" && rsync -av "art-$s/" "fd/"
-            cd "txt-$s" && git add . && git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s) && cd ..
-            cd fd && git add . && git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin) && cd ..
+            cd "txt-$s" && git add . && (git diff --staged --quiet || (git commit -m "Update $s Text" && git push origin $s)) && cd ..
+            cd fd && git add . && (git diff --staged --quiet || (git commit -m "Update $s FlatData" && git push origin)) && cd ..
           done
 
   trigger:
     needs: [setup, Final]
     runs-on: ubuntu-latest
-    if: always()
+    if: always() && needs.Final.result == 'success'
     steps:
       - run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -d '{"event_type": "run-media-deployment","client_payload": {"JP_enabled": "${{ contains(needs.setup.outputs.matrix, "JP") }}","GL_enabled": "${{ contains(needs.setup.outputs.matrix, "GL") }}","CN_enabled": "${{ contains(needs.setup.outputs.matrix, "CN") }}"}}'
+          -d '{"event_type": "run-media-deployment","client_payload": {"JP_enabled": "${{ needs.setup.outputs.jp_sw }}","GL_enabled": "${{ needs.setup.outputs.gl_sw }}","CN_enabled": "${{ needs.setup.outputs.cn_sw }}"}}'
