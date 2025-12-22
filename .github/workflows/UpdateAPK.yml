@@ -1,4 +1,4 @@
-Name: Update-APK
+name: Update-APK
 
 on:
   workflow_dispatch:

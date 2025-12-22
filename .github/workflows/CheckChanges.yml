@@ -40,7 +40,8 @@ jobs:
       - name: Get Current Versions
         id: curr_ver
         run: |
-          echo 'jp_v=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")' >> $GITHUB_OUTPUT
+          VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
+          echo "jp_v=$$VERSION" >> $GITHUB_OUTPUT
 
       - name: Restore JP APK Cache
         uses: actions/cache/restore@v4
