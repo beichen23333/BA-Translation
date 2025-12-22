@@ -38,37 +38,41 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
-      - name: Get JP Version
+      - name: Get Latest Versions
         id: get_ver
         run: |
-          PAYLOAD_VER="${{ github.event.client_payload.version }}"
-          if [ -z "$PAYLOAD_VER" ]; then
-            VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
-          else
-            VERSION=$PAYLOAD_VER
-          fi
-          echo "latest_jp_ver=$VERSION" >> $GITHUB_OUTPUT
+          echo "jp_v=$(python -c 'from update.regions import JPServer; print(JPServer().get_latest_version())')" >> $GITHUB_OUTPUT
+          echo "gl_v=$(python -c 'from update.regions import GLServer; print(GLServer().get_latest_version())')" >> $GITHUB_OUTPUT
+          echo "cn_v=$(python -c 'from update.regions import CNServer; print(CNServer().get_latest_version())')" >> $GITHUB_OUTPUT
 
-      - name: Restore JP APK Cache
-        id: restore-cache
+      - name: Restore APK Caches
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/BlueArchive_JP.xapk
-          key: JP-APK-${{ steps.get_ver.outputs.latest_jp_ver }}
+          path: |
+            /tmp/BlueArchive_JP.xapk
+            /tmp/BlueArchive_GL.xapk
+            /tmp/BlueArchive_CN.apk
+          key: APK-CACHE-${{ steps.get_ver.outputs.jp_v }}-${{ steps.get_ver.outputs.gl_v }}-${{ steps.get_ver.outputs.cn_v }}
+          restore-keys: APK-CACHE-
 
       - name: Update Data
         id: update_step
         env: 
           PYTHONUNBUFFERED: "1"
-          JP_APK_CACHE_PATH: ${{ steps.restore-cache.outputs.cache-hit == 'true' && '/tmp/BlueArchive_JP.xapk' || '' }}
+          JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
+          GL_APK_CACHE_PATH: /tmp/BlueArchive_GL.xapk
+          CN_APK_CACHE_PATH: /tmp/BlueArchive_CN.apk
         run: python update_url.py info.json
 
-      - name: Save JP APK Cache
-        if: steps.update_step.outputs.jp_apk_path != '' && steps.restore-cache.outputs.cache-hit != 'true'
+      - name: Save APK Caches
+        if: steps.update_step.outputs.jp_apk_path != '' || steps.update_step.outputs.gl_apk_path != '' || steps.update_step.outputs.cn_apk_path != ''
         uses: actions/cache/save@v4
         with:
-          path: ${{ steps.update_step.outputs.jp_apk_path }}
-          key: JP-APK-${{ steps.update_step.outputs.jp_version }}
+          path: |
+            /tmp/BlueArchive_JP.xapk
+            /tmp/BlueArchive_GL.xapk
+            /tmp/BlueArchive_CN.apk
+          key: APK-CACHE-${{ steps.get_ver.outputs.jp_v }}-${{ steps.get_ver.outputs.gl_v }}-${{ steps.get_ver.outputs.cn_v }}
 
       - name: Commit Changes
         id: commit_check
@@ -89,25 +93,14 @@ jobs:
         id: status
         if: steps.commit_check.outputs.changed == 'true'
         run: |
-          JP_UPDATED=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo "true" || echo "false")
-          GL_UPDATED=$(git diff HEAD^ HEAD info.json | grep -q '"GL"' && echo "true" || echo "false")
-          CN_UPDATED=$(git diff HEAD^ HEAD info.json | grep -q '"CN"' && echo "true" || echo "false")
-          
-          echo "jp_up=$JP_UPDATED" >> $GITHUB_OUTPUT
-          echo "gl_up=$GL_UPDATED" >> $GITHUB_OUTPUT
-          echo "cn_up=$CN_UPDATED" >> $GITHUB_OUTPUT
-
+          JP_UP=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo "true" || echo "false")
+          GL_UP=$(git diff HEAD^ HEAD info.json | grep -q '"GL"' && echo "true" || echo "false")
+          CN_UP=$(git diff HEAD^ HEAD info.json | grep -q '"CN"' && echo "true" || echo "false")
+          echo "jp_up=$JP_UP" >> $GITHUB_OUTPUT
+          echo "gl_up=$GL_UP" >> $GITHUB_OUTPUT
+          echo "cn_up=$CN_UP" >> $GITHUB_OUTPUT
           if ! git diff HEAD^ HEAD index.json --quiet; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -H "Accept: application/vnd.github.v3+json" \
-                 https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
-          fi
-
-          if [ "$JP_UPDATED" = "true" ]; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/dispatches \
-              -d "{\"event_type\": \"APK\", \"client_payload\": {\"version\": \"${{ steps.update_step.outputs.jp_version }}\"}}"
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
           fi
 
       - name: Generate Strategy Matrix
@@ -133,48 +126,43 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Clone Tool
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
           cp -r tool/* . && rm -rf tool
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
-
       - name: Get Version
         id: v
         run: |
           bash other/version.sh ${{ matrix.server.id }} info.json
-          V_FL=$(grep "${{ matrix.server.id }}_FLATDATA_VERSION_NAME" $GITHUB_OUTPUT | cut -d'=' -f2)
-          echo "fl_ver=$V_FL" >> $GITHUB_OUTPUT
-
-      - name: Restore JP APK Cache
-        if: matrix.server.id == 'JP'
+          echo "fl_ver=$(grep '${{ matrix.server.id }}_FLATDATA_VERSION_NAME' $GITHUB_OUTPUT | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+      - name: Restore APK Cache
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/BlueArchive_JP.xapk
-          key: JP-APK-${{ needs.check_changes.outputs.jp_version }}
-
+          path: |
+            /tmp/BlueArchive_JP.xapk
+            /tmp/BlueArchive_GL.xapk
+            /tmp/BlueArchive_CN.apk
+          key: APK-CACHE-
       - name: Run Setup
         env:
           JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
+          GL_APK_CACHE_PATH: /tmp/BlueArchive_GL.xapk
+          CN_APK_CACHE_PATH: /tmp/BlueArchive_CN.apk
         run: python setup_flatdata.py ${{ matrix.server.id }}
-
-      - name: Save to Cache
+      - name: Save FlatData
         uses: actions/cache/save@v4
         with:
           path: ./Extracted
           key: ${{ matrix.server.id }}${{ steps.v.outputs.fl_ver }}
-
       - name: Package and Push
         env:
           GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
@@ -185,9 +173,7 @@ jobs:
           git config --global user.email "actions@github.com"
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git repo_flat
           cp "$ZIP_NAME" repo_flat/
-          cd repo_flat
-          git add .
-          git commit -m "Upload FlatData: $ZIP_NAME" && git push origin ${{ matrix.server.id }} || echo "No changes"
+          cd repo_flat && git add . && git commit -m "Upload FlatData: $ZIP_NAME" && git push origin ${{ matrix.server.id }} || echo "No changes"
 
   dispatch_unpack:
     needs: [check_changes, setup_flatdata]
