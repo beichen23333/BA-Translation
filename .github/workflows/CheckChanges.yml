@@ -43,7 +43,7 @@ jobs:
       - name: Update Data
         timeout-minutes: 6
         continue-on-error: true
-        env: |
+        env: 
           PYTHONUNBUFFERED: "1"
         run: |
           python update_url.py info.json
