@@ -14,13 +14,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: false
-          fetch-depth: 0
 
       - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git BlueArchive-Translation
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git BlueArchive-Translation
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BAJpApkSrc.git BAJpApkSrc
 
       - name: Move contents to current directory
@@ -29,9 +26,9 @@ jobs:
           rm -rf BlueArchive-Translation
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -45,6 +42,27 @@ jobs:
           pip install -r requirements.txt
           pip install androguard
 
+      - name: Get JP Version
+        id: get_ver
+        run: |
+          PAYLOAD_VER="${{ github.event.client_payload.version }}"
+          if [ -z "$PAYLOAD_VER" ]; then
+            VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
+          else
+            VERSION=$PAYLOAD_VER
+          fi
+          echo "jp_ver=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Restore JP APK Cache
+        id: restore-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/BlueArchive_JP.xapk
+          key: JP-APK-${{ steps.get_ver.outputs.jp_ver }}
+
       - name: Run extraction script
+        env:
+          SSH_SECRETS: ${{ secrets.SSH_SECRETS }}
+          JP_APK_CACHE_PATH: ${{ steps.restore-cache.outputs.cache-hit == 'true' && '/tmp/BlueArchive_JP.xapk' || '' }}
         run: |
           python update_apk.py

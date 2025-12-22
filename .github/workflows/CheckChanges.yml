@@ -1,8 +1,6 @@
-name: Check Changes
+name: Update-APK
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
   repository_dispatch:
     types: [APK]
@@ -11,94 +9,60 @@ permissions:
   contents: write
 
 jobs:
-  update:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.APK_SRC_REPO }}
 
-      - name: Clone repositories
+      - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git temp_src
-          cp -r temp_src/* .
-          rm -rf temp_src
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git BlueArchive-Translation
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BAJpApkSrc.git BAJpApkSrc
 
-      - name: Set up Python 3.12
+      - name: Move contents to current directory
+        run: |
+          mv BlueArchive-Translation/* .
+          rm -rf BlueArchive-Translation
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install requirements
-        run: pip install -r requirements.txt
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Get Latest JP Version
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install androguard
+
+      - name: Get JP Version
         id: get_ver
         run: |
-          VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
-          echo "latest_jp_ver=$VERSION" >> $GITHUB_OUTPUT
+          PAYLOAD_VER="${{ github.event.client_payload.version }}"
+          if [ -z "$PAYLOAD_VER" ]; then
+            VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
+          else
+            VERSION=$PAYLOAD_VER
+          fi
+          echo "jp_ver=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Restore JP APK Cache
         id: restore-cache
         uses: actions/cache/restore@v4
         with:
           path: /tmp/BlueArchive_JP.xapk
-          key: JP-APK-${{ steps.get_ver.outputs.latest_jp_ver }}
+          key: JP-APK-${{ steps.get_ver.outputs.jp_ver }}
 
-      - name: Update Data
-        id: update_step
-        env: 
-          PYTHONUNBUFFERED: "1"
+      - name: Run extraction script
+        env:
+          SSH_SECRETS: ${{ secrets.SSH_SECRETS }}
           JP_APK_CACHE_PATH: ${{ steps.restore-cache.outputs.cache-hit == 'true' && '/tmp/BlueArchive_JP.xapk' || '' }}
         run: |
-          python update_url.py info.json
-
-      - name: Save JP APK Cache
-        if: steps.update_step.outputs.jp_apk_path != '' && steps.restore-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ steps.update_step.outputs.jp_apk_path }}
-          key: JP-APK-${{ steps.update_step.outputs.jp_version }}
-
-      - name: Commit and Dispatch
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          
-          curl -sS -f https://prod-noticeindex.bluearchiveyostar.com/prod/index.json | jq . > index.json
-          
-          git add info.json index.json
-          
-          CHANGES=$(git status --porcelain info.json index.json)
-          if [ -z "$CHANGES" ]; then
-            echo "No changes detected in data files. Skipping."
-            exit 0
-          fi
-
-          JP_UPDATED=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo true || echo false)
-          GL_UPDATED=$(git diff --cached info.json | grep -q '"GL"' && echo true || echo false)
-          CN_UPDATED=$(git diff --cached info.json | grep -q '"CN"' && echo true || echo false)
-          INDEX_UPDATED=$(git diff --cached index.json --quiet || echo true)
-
-          if [ "$INDEX_UPDATED" = "true" ]; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -H "Accept: application/vnd.github.v3+json" \
-                 https://api.github.com/repos/${{ github.repository }}/dispatches \
-                 -d '{"event_type": "Notic"}'
-          fi
-
-          git commit -m "Update: $(date -d "+8 hours" "+%Y-%m-%d %H:%M:%S")"
-          git push origin HEAD
-
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": $JP_UPDATED, \"GL_enabled\": $GL_UPDATED, \"CN_enabled\": $CN_UPDATED}}"
-
-          if [ "$JP_UPDATED" = "true" ]; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/dispatches \
-              -d "{\"event_type\": \"APK\", \"client_payload\": {\"version\": \"${{ steps.update_step.outputs.jp_version }}\"}}"
-          fi
+          python update_apk.py
