@@ -59,6 +59,7 @@ jobs:
 
       - name: Update Data
         id: update_step
+        continue-on-error: true
         env: 
           PYTHONUNBUFFERED: "1"
           JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
@@ -113,7 +114,7 @@ jobs:
         id: status
         if: steps.commit_check.outputs.changed == 'true'
         run: |
-          JP_UP=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo "true" || echo "false")
+          JP_UP=$([ -f "/tmp/BlueArchive_JP.xapk" ] && echo "true" || echo "false")
           GL_UP=$(git diff HEAD^ HEAD info.json | grep -q '"GL"' && echo "true" || echo "false")
           CN_UP=$(git diff HEAD^ HEAD info.json | grep -q '"CN"' && echo "true" || echo "false")
           echo "jp_up=$JP_UP" >> $GITHUB_OUTPUT
