@@ -16,6 +16,7 @@ jobs:
       changed: ${{ steps.commit_check.outputs.changed }}
       jp_up: ${{ steps.status.outputs.jp_up }}
       jp_v: ${{ steps.final_ver.outputs.jp_v }}
+      jp_path: ${{ steps.update_step.outputs.jp_apk_path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,34 +42,30 @@ jobs:
         run: |
           echo "jp_v=$(jq -r '.JP.APKVersionName // "0"' info.json)" >> $GITHUB_OUTPUT
 
-      # 仅保留 JP 的缓存恢复，GL 和 CN 每次根据脚本逻辑直接下载
       - name: Restore JP APK Cache
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/BlueArchive_JP.xapk
+          path: Temp/
           key: APK-CACHE-JP-${{ steps.curr_ver.outputs.jp_v }}
           restore-keys: APK-CACHE-JP-
 
       - name: Update Data
         id: update_step
-        continue-on-error: true
         env: 
           PYTHONUNBUFFERED: "1"
-          JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
+          JP_APK_CACHE_PATH: ${{ github.workspace }}/$(ls Temp/*.xapk 2>/dev/null | head -n 1)
         run: python update_url.py info.json
 
       - name: Get Final Versions
         id: final_ver
         run: |
-          JP_V=$(jq -r '.JP.APKVersionName // "unknown"' info.json)
-          echo "jp_v=$JP_V" >> $GITHUB_OUTPUT
+          echo "jp_v=$(jq -r '.JP.APKVersionName // "unknown"' info.json)" >> $GITHUB_OUTPUT
 
-      # 只要本地存在 XAPK 文件就保存/更新缓存，不再判断版本是否变动
       - name: Save JP APK Cache
-        if: always() && hashFiles('/tmp/BlueArchive_JP.xapk') != ''
+        if: always() && steps.update_step.outputs.jp_apk_path != ''
         uses: actions/cache/save@v4
         with:
-          path: /tmp/BlueArchive_JP.xapk
+          path: ${{ steps.update_step.outputs.jp_apk_path }}
           key: APK-CACHE-JP-${{ steps.final_ver.outputs.jp_v }}
 
       - name: Commit Changes
@@ -90,7 +87,7 @@ jobs:
         id: status
         if: steps.commit_check.outputs.changed == 'true'
         run: |
-          JP_UP=$([ -f "/tmp/BlueArchive_JP.xapk" ] && echo "true" || echo "false")
+          JP_UP=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo "true" || echo "false")
           echo "jp_up=$JP_UP" >> $GITHUB_OUTPUT
           if ! git diff HEAD^ HEAD index.json --quiet; then
             curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
@@ -108,7 +105,6 @@ jobs:
 
   setup_flatdata:
     needs: check_changes
-    # 只要有变动就尝试运行，内部 matrix 会根据具体服的开启状态过滤
     if: needs.check_changes.outputs.changed == 'true' && needs.check_changes.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
@@ -132,18 +128,16 @@ jobs:
           sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
       
-      # setup_flatdata 阶段同样只为 JP 恢复缓存
       - name: Restore JP APK Cache
         if: matrix.server.id == 'JP'
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/BlueArchive_JP.xapk
+          path: ${{ needs.check_changes.outputs.jp_path }}
           key: APK-CACHE-JP-${{ needs.check_changes.outputs.jp_v }}
-          restore-keys: APK-CACHE-JP-
 
       - name: Run Setup
         env:
-          JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
+          JP_APK_CACHE_PATH: ${{ needs.check_changes.outputs.jp_path }}
         run: python setup_flatdata.py ${{ matrix.server.id }}
 
       - name: Package and Push
