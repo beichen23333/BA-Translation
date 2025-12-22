@@ -40,6 +40,23 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
+      - name: Get Current Versions
+        id: curr_ver
+        run: |
+          echo "jp_v=$(jq -r '.JP.APKVersionName // "0"' info.json)" >> $GITHUB_OUTPUT
+          echo "gl_v=$(jq -r '.GL.APKVersionName // "0"' info.json)" >> $GITHUB_OUTPUT
+          echo "cn_v=$(jq -r '.CN.APKVersionName // "0"' info.json)" >> $GITHUB_OUTPUT
+
+      - name: Restore APK Caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /tmp/BlueArchive_JP.xapk
+            /tmp/BlueArchive_GL.xapk
+            /tmp/BlueArchive_CN.apk
+          key: APK-CACHE-${{ steps.curr_ver.outputs.jp_v }}-${{ steps.curr_ver.outputs.gl_v }}-${{ steps.curr_ver.outputs.cn_v }}
+          restore-keys: APK-CACHE-
+
       - name: Update Data
         id: update_step
         env: 
@@ -52,9 +69,9 @@ jobs:
       - name: Get Final Versions
         id: final_ver
         run: |
-          JP_V=$(jq -r '.JP.Version' info.json)
-          GL_V=$(jq -r '.GL.Version' info.json)
-          CN_V=$(jq -r '.CN.Version' info.json)
+          JP_V=$(jq -r '.JP.APKVersionName // "unknown"' info.json)
+          GL_V=$(jq -r '.GL.APKVersionName // "unknown"' info.json)
+          CN_V=$(jq -r '.CN.APKVersionName // "unknown"' info.json)
           echo "jp_v=$JP_V" >> $GITHUB_OUTPUT
           echo "gl_v=$GL_V" >> $GITHUB_OUTPUT
           echo "cn_v=$CN_V" >> $GITHUB_OUTPUT
