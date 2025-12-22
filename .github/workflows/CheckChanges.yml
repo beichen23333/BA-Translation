@@ -16,6 +16,15 @@ jobs:
         with:
           token: ${{ secrets.APK_SRC_REPO }}
 
+      - name: Clone repositories
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git
+
+      - name: Move contents to current directory
+        run: |
+          mv BlueArchive-Translation/* .
+          rm -rf BlueArchive-Translation
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -24,12 +33,17 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
-      - name: Update Data
+      - name: Update index
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           
           curl -sS -f https://prod-noticeindex.bluearchiveyostar.com/prod/index.json | jq . > index.json
+
+      - name: Update Data
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
           python update_url.py info.json
 
       - name: Commit and Dispatch
