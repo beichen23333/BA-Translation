@@ -1,4 +1,4 @@
-name: Update-APK
+Name: Update-APK
 
 on:
   workflow_dispatch:
@@ -14,16 +14,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.APK_SRC_REPO }}
 
       - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git BlueArchive-Translation
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git temp_src
+          cp -r temp_src/* .
+          rm -rf temp_src
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BAJpApkSrc.git BAJpApkSrc
-
-      - name: Move contents to current directory
-        run: |
-          mv BlueArchive-Translation/* .
-          rm -rf BlueArchive-Translation
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -46,10 +45,10 @@ jobs:
         id: get_ver
         run: |
           PAYLOAD_VER="${{ github.event.client_payload.version }}"
-          if [ -z "$PAYLOAD_VER" ]; then
-            VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
-          else
+          if [ -n "$PAYLOAD_VER" ]; then
             VERSION=$PAYLOAD_VER
+          else
+            VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
           fi
           echo "jp_ver=$VERSION" >> $GITHUB_OUTPUT
 
@@ -58,12 +57,16 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /tmp/BlueArchive_JP.xapk
-          key: JP-APK-${{ steps.get_ver.outputs.jp_ver }}
+          key: APK-CACHE-JP-${{ steps.get_ver.outputs.jp_ver }}
+          restore-keys: APK-CACHE-JP-
 
       - name: Run extraction script
         env:
           PYTHONUNBUFFERED: "1"
           SSH_SECRETS: ${{ secrets.SSH_SECRETS }}
-          JP_APK_CACHE_PATH: ${{ steps.restore-cache.outputs.cache-hit == 'true' && '/tmp/BlueArchive_JP.xapk' || '' }}
+          JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
         run: |
+          if [ ! -f "/tmp/BlueArchive_JP.xapk" ]; then
+            echo "Warning: Cache not found at /tmp/BlueArchive_JP.xapk"
+          fi
           python update_apk.py
