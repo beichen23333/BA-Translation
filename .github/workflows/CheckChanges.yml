@@ -1,4 +1,4 @@
-name: Check Changes
+Name: Check Changes
 
 on:
   schedule:
@@ -17,7 +17,9 @@ jobs:
       jp_up: ${{ steps.status.outputs.jp_up }}
       gl_up: ${{ steps.status.outputs.gl_up }}
       cn_up: ${{ steps.status.outputs.cn_up }}
-      jp_version: ${{ steps.update_step.outputs.jp_version }}
+      jp_v: ${{ steps.final_ver.outputs.jp_v }}
+      gl_v: ${{ steps.final_ver.outputs.gl_v }}
+      cn_v: ${{ steps.final_ver.outputs.cn_v }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,23 +40,6 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
-      - name: Get Latest Versions
-        id: get_ver
-        run: |
-          echo "jp_v=$(python -c 'from update.regions import JPServer; print(JPServer().get_latest_version())')" >> $GITHUB_OUTPUT
-          echo "gl_v=$(python -c 'from update.regions import GLServer; print(GLServer().get_latest_version())')" >> $GITHUB_OUTPUT
-          echo "cn_v=$(python -c 'from update.regions import CNServer; print(CNServer().get_latest_version())')" >> $GITHUB_OUTPUT
-
-      - name: Restore APK Caches
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            /tmp/BlueArchive_JP.xapk
-            /tmp/BlueArchive_GL.xapk
-            /tmp/BlueArchive_CN.apk
-          key: APK-CACHE-${{ steps.get_ver.outputs.jp_v }}-${{ steps.get_ver.outputs.gl_v }}-${{ steps.get_ver.outputs.cn_v }}
-          restore-keys: APK-CACHE-
-
       - name: Update Data
         id: update_step
         env: 
@@ -64,6 +49,16 @@ jobs:
           CN_APK_CACHE_PATH: /tmp/BlueArchive_CN.apk
         run: python update_url.py info.json
 
+      - name: Get Final Versions
+        id: final_ver
+        run: |
+          JP_V=$(jq -r '.JP.Version' info.json)
+          GL_V=$(jq -r '.GL.Version' info.json)
+          CN_V=$(jq -r '.CN.Version' info.json)
+          echo "jp_v=$JP_V" >> $GITHUB_OUTPUT
+          echo "gl_v=$GL_V" >> $GITHUB_OUTPUT
+          echo "cn_v=$CN_V" >> $GITHUB_OUTPUT
+
       - name: Save APK Caches
         if: steps.update_step.outputs.jp_apk_path != '' || steps.update_step.outputs.gl_apk_path != '' || steps.update_step.outputs.cn_apk_path != ''
         uses: actions/cache/save@v4
@@ -72,7 +67,7 @@ jobs:
             /tmp/BlueArchive_JP.xapk
             /tmp/BlueArchive_GL.xapk
             /tmp/BlueArchive_CN.apk
-          key: APK-CACHE-${{ steps.get_ver.outputs.jp_v }}-${{ steps.get_ver.outputs.gl_v }}-${{ steps.get_ver.outputs.cn_v }}
+          key: APK-CACHE-${{ steps.final_ver.outputs.jp_v }}-${{ steps.final_ver.outputs.gl_v }}-${{ steps.final_ver.outputs.cn_v }}
 
       - name: Commit Changes
         id: commit_check
@@ -142,8 +137,9 @@ jobs:
       - name: Get Version
         id: v
         run: |
-          bash other/version.sh ${{ matrix.server.id }} info.json
-          echo "fl_ver=$(grep '${{ matrix.server.id }}_FLATDATA_VERSION_NAME' $GITHUB_OUTPUT | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+          if [ "${{ matrix.server.id }}" == "JP" ]; then echo "fl_ver=${{ needs.check_changes.outputs.jp_v }}" >> $GITHUB_OUTPUT; fi
+          if [ "${{ matrix.server.id }}" == "GL" ]; then echo "fl_ver=${{ needs.check_changes.outputs.gl_v }}" >> $GITHUB_OUTPUT; fi
+          if [ "${{ matrix.server.id }}" == "CN" ]; then echo "fl_ver=${{ needs.check_changes.outputs.cn_v }}" >> $GITHUB_OUTPUT; fi
       - name: Restore APK Cache
         uses: actions/cache/restore@v4
         with:
@@ -151,7 +147,8 @@ jobs:
             /tmp/BlueArchive_JP.xapk
             /tmp/BlueArchive_GL.xapk
             /tmp/BlueArchive_CN.apk
-          key: APK-CACHE-
+          key: APK-CACHE-${{ needs.check_changes.outputs.jp_v }}-${{ needs.check_changes.outputs.gl_v }}-${{ needs.check_changes.outputs.cn_v }}
+          restore-keys: APK-CACHE-
       - name: Run Setup
         env:
           JP_APK_CACHE_PATH: /tmp/BlueArchive_JP.xapk
