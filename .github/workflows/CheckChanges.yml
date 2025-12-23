@@ -1,4 +1,4 @@
-name: Check Changes
+Name: Check Changes
 
 on:
   schedule:
@@ -17,7 +17,11 @@ jobs:
       jp_updated: ${{ env.JP_updated }}
       gl_updated: ${{ env.GL_updated }}
       cn_updated: ${{ env.CN_updated }}
+      jp_updated_text: ${{ env.JP_UPDATED_TEXT }}
       jp_ac_ver: ${{ steps.save_ver.outputs.jp_ac_ver }}
+      jp_fl_ver: ${{ steps.save_ver.outputs.jp_fl_ver }}
+      gl_fl_ver: ${{ steps.save_ver.outputs.gl_fl_ver }}
+      cn_fl_ver: ${{ steps.save_ver.outputs.cn_fl_ver }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,72 +67,63 @@ jobs:
           GL_UPDATED=false
           CN_UPDATED=false
           APK_VERSION_CHANGED=false
-          AC_URL_CHANGED=false
+          JP_UPDATED_TEXT=false
+
+          bash other/version.sh JP info.json > version_out.tmp
+          V_BA=$(grep 'JP_BA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)
+          ZIP_NAME="日服${V_BA}.zip"
+          git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git asset_repo
+          
+          if [ ! -f "asset_repo/$ZIP_NAME" ]; then
+            NEW_CATALOG_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
+            TEST_URL="${NEW_CATALOG_URL}/TableBundles/TableCatalog.bytes"
+            STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$TEST_URL")
+            if [ "$STATUS_CODE" = "200" ]; then
+              JP_UPDATED_TEXT=true
+            fi
+          fi
           
           if git diff --cached --quiet; then
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "JP_updated=false" >> $GITHUB_ENV
-            echo "GL_updated=false" >> $GITHUB_ENV
-            echo "CN_updated=false" >> $GITHUB_ENV
           else
             git diff --cached info.json > changes.diff
-            
             if grep -q '"CN"' changes.diff; then CN_UPDATED=true; fi
             if grep -q '"GL"' changes.diff; then GL_UPDATED=true; fi
             if grep -q '"JP"' changes.diff; then 
               JP_UPDATED=true
-              
               if grep -A 5 '"JP":' changes.diff | grep -q '"APKVersionName"'; then
                 APK_VERSION_CHANGED=true
               fi
-
-              if grep -q '"AddressableCatalogUrl"' changes.diff; then
-                AC_URL_CHANGED=true
-                
-                bash other/version.sh JP info.json > version_out.tmp
-                V_BA=$(grep 'JP_BA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)
-                ZIP_NAME="日服${V_BA}.zip"
-                
-                git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git asset_repo
-                
-                if [ -f "asset_repo/$ZIP_NAME" ]; then
-                  echo "$ZIP_NAME already exists, skipping JP update."
-                  JP_UPDATED_TEXT=false
-                else
-                  NEW_CATALOG_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
-                  TEST_URL="${NEW_CATALOG_URL}/TableBundles/TableCatalog.bytes"
-                  STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$TEST_URL")
-                  
-                  if [ "$STATUS_CODE" != "200" ]; then
-                    echo "Test URL failed with status $STATUS_CODE: $TEST_URL"
-                    JP_UPDATED_TEXT=false
-                  fi
-                fi
-              fi
             fi
-            
-            SI_URL=$(jq -r '.JP.ServerInfoDataUrl' info.json)
-            SI_VER=$(echo "$SI_URL" | sed 's/.*\///; s/\.[^.]*$//')
-            AC_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
-            AC_VER=$(echo "$AC_URL" | sed 's/.*\///')
-
-            echo "JP_updated=$JP_UPDATED" >> $GITHUB_ENV
-            echo "JP_updated_text=$JP_UPDATED" >> $GITHUB_ENV
-            echo "GL_updated=$GL_UPDATED" >> $GITHUB_ENV
-            echo "CN_updated=$CN_UPDATED" >> $GITHUB_ENV
-            echo "APK_VERSION_CHANGED=$APK_VERSION_CHANGED" >> $GITHUB_ENV
-            echo "AC_URL_CHANGED=$AC_URL_CHANGED" >> $GITHUB_ENV
-            echo "JP_SI_VER=$SI_VER" >> $GITHUB_ENV
-            echo "JP_AC_VER=$AC_VER" >> $GITHUB_ENV
             
             git commit -m "Update Blue Archive Data: $(date -d "+8 hours" "+%Y-%m-%d %H:%M:%S")"
             git push origin HEAD
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
+          SI_URL=$(jq -r '.JP.ServerInfoDataUrl' info.json)
+          SI_VER=$(echo "$SI_URL" | sed 's/.*\///; s/\.[^.]*$//')
+          AC_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
+          AC_VER=$(echo "$AC_URL" | sed 's/.*\///')
+
+          echo "JP_updated=$JP_UPDATED" >> $GITHUB_ENV
+          echo "GL_updated=$GL_UPDATED" >> $GITHUB_ENV
+          echo "CN_updated=$CN_UPDATED" >> $GITHUB_ENV
+          echo "JP_UPDATED_TEXT=$JP_UPDATED_TEXT" >> $GITHUB_ENV
+          echo "APK_VERSION_CHANGED=$APK_VERSION_CHANGED" >> $GITHUB_ENV
+          echo "JP_SI_VER=$SI_VER" >> $GITHUB_ENV
+          echo "JP_AC_VER=$AC_VER" >> $GITHUB_ENV
+
       - name: Save Version to Output
         id: save_ver
-        run: echo "jp_ac_ver=${{ env.JP_AC_VER }}" >> $GITHUB_OUTPUT
+        run: |
+          echo "jp_ac_ver=${{ env.JP_AC_VER }}" >> $GITHUB_OUTPUT
+          bash other/version.sh JP info.json
+          echo "jp_fl_ver=$(grep 'JP_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+          bash other/version.sh GL info.json
+          echo "gl_fl_ver=$(grep 'GL_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+          bash other/version.sh CN info.json
+          echo "cn_fl_ver=$(grep 'CN_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
 
       - name: Update Remote Status
         if: steps.commit_check.outputs.changed == 'true' && env.JP_updated == 'true'
@@ -146,16 +141,14 @@ jobs:
           if ! git diff HEAD^ HEAD index.json --quiet; then
             curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
           fi
-          
           if [ "${{ env.APK_VERSION_CHANGED }}" = "true" ]; then
             curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "APK"}'
           fi
 
       - name: Generate Strategy Matrix
         id: set-matrix
-        if: steps.commit_check.outputs.changed == 'true'
         run: |
-          MATRIX=$(jq -nc --arg jp "${{ env.JP_updated }}" --arg gl "${{ env.GL_updated }}" --arg cn "${{ env.CN_updated }}" \
+          MATRIX=$(jq -nc --arg jp "${{ env.JP_UPDATED_TEXT }}" --arg gl "${{ env.GL_updated }}" --arg cn "${{ env.CN_updated }}" \
             '[
               {id: "JP", name: "日服", enabled: $jp},
               {id: "GL", name: "国际服", enabled: $gl},
@@ -165,7 +158,7 @@ jobs:
 
   setup_flatdata:
     needs: check_changes
-    if: needs.check_changes.outputs.changed == 'true' && needs.check_changes.outputs.matrix != '[]'
+    if: needs.check_changes.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -192,12 +185,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Get Version info
+      - name: Set Version
         id: v
         run: |
-          bash other/version.sh ${{ matrix.server.id }} info.json
-          FL_VER=$(grep "${{ matrix.server.id }}_FLATDATA_VERSION_NAME" $GITHUB_OUTPUT | cut -d'=' -f2)
-          echo "fl_ver=$FL_VER" >> $GITHUB_OUTPUT
+          if [ "${{ matrix.server.id }}" = "JP" ]; then VER="${{ needs.check_changes.outputs.jp_fl_ver }}"; fi
+          if [ "${{ matrix.server.id }}" = "GL" ]; then VER="${{ needs.check_changes.outputs.gl_fl_ver }}"; fi
+          if [ "${{ matrix.server.id }}" = "CN" ]; then VER="${{ needs.check_changes.outputs.cn_fl_ver }}"; fi
+          echo "fl_ver=$VER" >> $GITHUB_OUTPUT
 
       - name: Run Setup
         run: python setup_flatdata.py ${{ matrix.server.id }}
@@ -219,15 +213,14 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       always() && 
-      needs.check_changes.outputs.changed == 'true' && 
-      (needs.check_changes.outputs.JP_updated_text == 'true' || needs.check_changes.outputs.gl_updated == 'true' || needs.check_changes.outputs.cn_updated == 'true')
+      (needs.check_changes.outputs.jp_updated_text == 'true' || needs.check_changes.outputs.gl_updated == 'true' || needs.check_changes.outputs.cn_updated == 'true')
     steps:
       - name: Dispatch Unpack
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_updated }}, \"GL_enabled\": ${{ needs.check_changes.outputs.gl_updated }}, \"CN_enabled\": ${{ needs.check_changes.outputs.cn_updated }}}}"
+            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_updated_text }}, \"GL_enabled\": ${{ needs.check_changes.outputs.gl_updated }}, \"CN_enabled\": ${{ needs.check_changes.outputs.cn_updated }}}}"
 
       - name: Dispatch Repack
         run: |
