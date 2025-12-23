@@ -1,6 +1,11 @@
 name: Update-Repack Excel
 on:
   workflow_dispatch:
+    inputs:
+      custom_dir:
+        description: 'Target Directory'
+        required: false
+        default: 'default'
   repository_dispatch:
     types: [Repack]
 permissions:
@@ -17,7 +22,9 @@ jobs:
 
       - name: Clone repository
         run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com:/beichen23333/BlueArchive-Translation.git
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git
+          git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git BA-Assets-TableBundles
+          git clone --depth 1 --branch JP https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/beichen.git beichen
 
       - name: Move contents to current directory
         run: |
@@ -38,13 +45,44 @@ jobs:
           pip install sqlcipher3
           pip install pysqlcipher3
 
-      - name: Update repack
+      - name: Get Version info
+        id: v
         run: |
-          python setup_flatdata.py JP
+          bash other/version.sh JP info.json
+          V_BA=$(grep 'JP_BA_VERSION_NAME' $GITHUB_OUTPUT | cut -d'=' -f2)
+          V_FL=$(grep 'JP_FLATDATA_VERSION_NAME' $GITHUB_OUTPUT | cut -d'=' -f2)
+          echo "ver=$V_BA" >> $GITHUB_OUTPUT
+          echo "fl_ver=$V_FL" >> $GITHUB_OUTPUT
+
+      - name: Clone and Unpack FlatData
+        run: |
+          git clone --depth 1 --branch JP https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git flat_repo
+          mkdir -p Extracted
+          ZIP_NAME="JP${{ steps.v.outputs.fl_ver }}.zip"
+          if [ -f "flat_repo/$ZIP_NAME" ]; then
+            unzip -o "flat_repo/$ZIP_NAME" -d ./Extracted
+          else
+            exit 1
+          fi
+
+      - name: Update table
+        run: |
           chmod +x update/update_table.sh
           update/update_table.sh JP
           chmod +x ./other/MemoryPackRepacker
-          ./other/MemoryPackRepacker deserialize media MediaCatalog.bytes MediaCatalog.json
           ./other/MemoryPackRepacker deserialize table TableCatalog.bytes TableCatalog.json
-          python build_excel_db.py ./Extracted/FlatData ./downloads/TableBundles/ExcelDB.db ./unpacked ./ExcelDB.db
-          python patch_table_catalog.py
+
+      - name: Extract Existing Assets
+        run: |
+          ZIP_NAME="BA-Assets-TableBundles/JP+${{ steps.v.outputs.ver }}.zip"
+          if [ -f "$ZIP_NAME" ]; then
+            mkdir -p unpacked
+            unzip -o "$ZIP_NAME" -d unpacked
+          fi
+
+      - name: Update Excel
+        env:
+          CUSTOM_DIR: ${{ github.event.inputs.custom_dir || github.event.client_payload.custom_dir || 'default' }}
+        run: |
+          python repack_excel.py ./beichen ./Extracted/FlatData ./downloads/TableBundles ./unpacked ./
+          python patch_table_catalog.py "$CUSTOM_DIR"
