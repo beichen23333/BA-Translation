@@ -13,7 +13,7 @@ jobs:
       - name: Generate Strategy Matrix
         id: set-matrix
         run: |
-          MATRIX=$(jq -nc --arg jp "${{ github.event.client_payload.jp_updated_text }}" --arg gl "${{ github.event.client_payload.gl_updated }}" --arg cn "${{ github.event.client_payload.cn_updated }}" \
+          MATRIX=$(jq -nc --arg jp "${{ github.event.client_payload.jp_updated }}" --arg gl "${{ github.event.client_payload.gl_updated }}" --arg cn "${{ github.event.client_payload.cn_updated }}" \
             '[
               {id: "JP", name: "日服", enabled: $jp},
               {id: "GL", name: "国际服", enabled: $gl},
@@ -77,7 +77,7 @@ jobs:
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ github.event.client_payload.jp_updated_text }}, \"GL_enabled\": ${{ github.event.client_payload.gl_updated }}, \"CN_enabled\": ${{ github.event.client_payload.cn_updated }}}}"
+            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ github.event.client_payload.jp_updated }}, \"GL_enabled\": ${{ github.event.client_payload.gl_updated }}, \"CN_enabled\": ${{ github.event.client_payload.cn_updated }}}}"
           
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \

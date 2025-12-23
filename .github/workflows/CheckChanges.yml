@@ -100,12 +100,12 @@ jobs:
           python -m update.update_status 1
 
       - name: Trigger FlatData Worker
-        if: env.JP_updated == 'true' ||  == 'true' || env.CN_updated == 'true'
+        if: env.JP_updated == 'true' || env.CN_updated == 'true' || env.CN_updated == 'true'
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.APK_SRC_REPO }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"setup_flatdata\", \"client_payload\": {\"jp_updated_text\": ${{ env.JP_UPDATED_TEXT }}, \"gl_updated\": ${{ env.GL_updated }}, \"cn_updated\": ${{ env.CN_updated }}, \"jp_ac_ver\": \"${{ env.JP_AC_VER }}\", \"apk_version_changed\": \"${{ env.APK_VERSION_CHANGED }}\"}}"
+            -d "{\"event_type\": \"setup_flatdata\", \"client_payload\": {\"jp_updated\": ${{ env.JP_updated }}, \"gl_updated\": ${{ env.GL_updated }}, \"cn_updated\": ${{ env.CN_updated }}, \"jp_ac_ver\": \"${{ env.JP_AC_VER }}\", \"apk_version_changed\": \"${{ env.APK_VERSION_CHANGED }}\"}}"
 
       - name: Status Dispatch
         if: steps.commit_check.outputs.changed == 'true'
@@ -122,8 +122,8 @@ jobs:
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ github.event.client_payload.jp_updated_text }}, \"GL_enabled\": ${{ github.event.client_payload.gl_updated }}, \"CN_enabled\": ${{ github.event.client_payload.cn_updated }}}}"
+            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ env.JP_updated }}, \"GL_enabled\": ${{ env.GL_updated }}, \"CN_enabled\": ${{ env.CN_updated }}}}"
           
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Repack\", \"client_payload\": {\"custom_dir\": \"${{ github.event.client_payload.jp_ac_ver }}\"}}"
+            -d "{\"event_type\": \"Repack\", \"client_payload\": {\"custom_dir\": \"${{ env.JP_AC_VER }}\"}}"
