@@ -11,14 +11,14 @@
     "JP": {
         "ServerInfoDataUrl": "https://yostar-serverinfo.bluearchiveyostar.com/r86_63_valo0kvoir39ti2g00u7.json",
         "AddressableCatalogUrl": "https://prod-clientpatch.bluearchiveyostar.com/r86_px35uw6urlv9hc7genm9",
-        "APKVersionName": "1.63.3847",
+        "APKVersionName": "1.63.3842",
         "APKVersionCode": "384227",
         "LastModified": "2025-11-19 13:23:07"
     },
     "GL": {
         "ServerInfoDataUrl": "https://ba.dn.nexoncdn.co.kr/com.nexon.bluearchive/299ceee327bf4eef/resource-data.json",
         "AddressableCatalogUrl": "https://ba.dn.nexoncdn.co.kr/com.nexon.bluearchive/299ceee327bf4eef/",
-        "APKVersionName": "1.82.3902",
+        "APKVersionName": "1.82.3901",
         "APKVersionCode": "390231",
         "LastModified": "2025-12-16 13:50:36"
     }
