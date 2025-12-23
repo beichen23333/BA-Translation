@@ -1,4 +1,4 @@
-name: Check Changes
+Name: Check Changes
 
 on:
   schedule:
@@ -19,9 +19,7 @@ jobs:
       cn_updated: ${{ env.CN_updated }}
       jp_updated_text: ${{ env.JP_UPDATED_TEXT }}
       jp_ac_ver: ${{ steps.save_ver.outputs.jp_ac_ver }}
-      jp_fl_ver: ${{ steps.save_ver.outputs.jp_fl_ver }}
-      gl_fl_ver: ${{ steps.save_ver.outputs.gl_fl_ver }}
-      cn_fl_ver: ${{ steps.save_ver.outputs.cn_fl_ver }}
+      apk_version_changed: ${{ env.APK_VERSION_CHANGED }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,8 +36,7 @@ jobs:
       - name: Clone repositories
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git temp_src
-          cp -r temp_src/* .
-          rm -rf temp_src
+          cp -r temp_src/* . && rm -rf temp_src
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,12 +47,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Update Data
-        id: update_step
-        env: 
-          PYTHONUNBUFFERED: "1"
         run: python update_url.py info.json
 
-      - name: Commit Changes
+      - name: Commit and Detect Changes
         id: commit_check
         run: |
           git config --global user.name "GitHub Actions"
@@ -70,15 +64,12 @@ jobs:
           JP_UPDATED_TEXT=false
 
           bash other/version.sh JP info.json > version_out.tmp
-          V_BA=$(grep 'JP_BA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)
-          ZIP_NAME="日服${V_BA}.zip"
-          git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git asset_repo
+          V_BA=$(grep 'JP_BA_VERSION_NAME' version_out.tmp | cut -d'=' -f2 | tr -d '\r')
           
-          if [ ! -f "asset_repo/$ZIP_NAME" ]; then
+          git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git asset_repo
+          if [ ! -f "asset_repo/日服${V_BA}.zip" ]; then
             NEW_CATALOG_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
-            TEST_URL="${NEW_CATALOG_URL}/TableBundles/TableCatalog.bytes"
-            STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$TEST_URL")
-            if [ "$STATUS_CODE" = "200" ]; then
+            if curl -o /dev/null -s -w "%{http_code}" "${NEW_CATALOG_URL}/TableBundles/TableCatalog.bytes" | grep -q "200"; then
               JP_UPDATED_TEXT=true
             fi
           fi
@@ -87,43 +78,30 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             git diff --cached info.json > changes.diff
-            if grep -q '"CN"' changes.diff; then CN_UPDATED=true; fi
-            if grep -q '"GL"' changes.diff; then GL_UPDATED=true; fi
+            grep -q '"CN"' changes.diff && CN_UPDATED=true
+            grep -q '"GL"' changes.diff && GL_UPDATED=true
             if grep -q '"JP"' changes.diff; then 
               JP_UPDATED=true
-              if grep -A 5 '"JP":' changes.diff | grep -q '"APKVersionName"'; then
-                APK_VERSION_CHANGED=true
-              fi
+              grep -A 5 '"JP":' changes.diff | grep -q '"APKVersionName"' && APK_VERSION_CHANGED=true
             fi
-            
-            git commit -m "Update Blue Archive Data: $(date -d "+8 hours" "+%Y-%m-%d %H:%M:%S")"
-            git push origin HEAD
+            git commit -m "Update Blue Archive Data: $(date)" && git push origin HEAD
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
           SI_URL=$(jq -r '.JP.ServerInfoDataUrl' info.json)
-          SI_VER=$(echo "$SI_URL" | sed 's/.*\///; s/\.[^.]*$//')
+          echo "JP_SI_VER=$(echo "$SI_URL" | sed 's/.*\///; s/\.[^.]*$//')" >> $GITHUB_ENV
           AC_URL=$(jq -r '.JP.AddressableCatalogUrl' info.json)
-          AC_VER=$(echo "$AC_URL" | sed 's/.*\///')
-
+          echo "JP_AC_VER=$(echo "$AC_URL" | sed 's/.*\///')" >> $GITHUB_ENV
+          
           echo "JP_updated=$JP_UPDATED" >> $GITHUB_ENV
           echo "GL_updated=$GL_UPDATED" >> $GITHUB_ENV
           echo "CN_updated=$CN_UPDATED" >> $GITHUB_ENV
           echo "JP_UPDATED_TEXT=$JP_UPDATED_TEXT" >> $GITHUB_ENV
           echo "APK_VERSION_CHANGED=$APK_VERSION_CHANGED" >> $GITHUB_ENV
-          echo "JP_SI_VER=$SI_VER" >> $GITHUB_ENV
-          echo "JP_AC_VER=$AC_VER" >> $GITHUB_ENV
 
       - name: Save Version to Output
         id: save_ver
-        run: |
-          echo "jp_ac_ver=${{ env.JP_AC_VER }}" >> $GITHUB_OUTPUT
-          bash other/version.sh JP info.json
-          echo "jp_fl_ver=$(grep 'JP_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-          bash other/version.sh GL info.json
-          echo "gl_fl_ver=$(grep 'GL_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-          bash other/version.sh CN info.json
-          echo "cn_fl_ver=$(grep 'CN_FLATDATA_VERSION_NAME' version_out.tmp | cut -d'=' -f2)" >> $GITHUB_OUTPUT
+        run: echo "jp_ac_ver=${{ env.JP_AC_VER }}" >> $GITHUB_OUTPUT
 
       - name: Update Remote Status
         if: steps.commit_check.outputs.changed == 'true' && env.JP_updated == 'true'
@@ -132,17 +110,16 @@ jobs:
           JP_AC_VER: ${{ env.JP_AC_VER }}
         run: |
           export PYTHONPATH=$PYTHONPATH:.
-          python -m update.update_status
+          python -m update.update_status 1
 
-      - name: Status and Dispatch
-        id: status
+      - name: Status Dispatch
         if: steps.commit_check.outputs.changed == 'true'
         run: |
           if ! git diff HEAD^ HEAD index.json --quiet; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -d '{"event_type": "Notic"}' https://api.github.com/repos/${{ github.repository }}/dispatches
           fi
           if [ "${{ env.APK_VERSION_CHANGED }}" = "true" ]; then
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "APK"}'
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -d '{"event_type": "APK"}' https://api.github.com/repos/${{ github.repository }}/dispatches
           fi
 
       - name: Generate Strategy Matrix
@@ -158,73 +135,29 @@ jobs:
 
   setup_flatdata:
     needs: check_changes
-    if: needs.check_changes.outputs.matrix != '[]'
-    runs-on: ubuntu-latest
+    if: needs.check_changes.outputs.matrix != '[]' && needs.check_changes.outputs.matrix != ''
     strategy:
       fail-fast: false
       matrix:
         server: ${{ fromJson(needs.check_changes.outputs.matrix) }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    uses: ./.github/workflows/SetupFlatData.yml
+    with:
+      server_id: ${{ matrix.server.id }}
+      server_name: ${{ matrix.server.name }}
+    secrets:
+      APK_SRC_REPO: ${{ secrets.APK_SRC_REPO }}
 
-      - name: Clone Tool
-        run: |
-          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
-          cp -r tool/* . && rm -rf tool
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Set Version
-        id: v
-        run: |
-          if [ "${{ matrix.server.id }}" = "JP" ]; then VER="${{ needs.check_changes.outputs.jp_fl_ver }}"; fi
-          if [ "${{ matrix.server.id }}" = "GL" ]; then VER="${{ needs.check_changes.outputs.gl_fl_ver }}"; fi
-          if [ "${{ matrix.server.id }}" = "CN" ]; then VER="${{ needs.check_changes.outputs.cn_fl_ver }}"; fi
-          echo "fl_ver=$VER" >> $GITHUB_OUTPUT
-
-      - name: Run Setup
-        run: python setup_flatdata.py ${{ matrix.server.id }}
-
-      - name: Package and Push
-        env:
-          GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
-        run: |
-          ZIP_NAME="${{ matrix.server.name }}${{ steps.v.outputs.fl_ver }}.zip"
-          cd Extracted && zip -r "../$ZIP_NAME" . && cd ..
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git repo_flat
-          cp "$ZIP_NAME" repo_flat/
-          cd repo_flat && git add . && git commit -m "Upload FlatData: $ZIP_NAME" && git push origin ${{ matrix.server.id }} || echo "No changes"
-
-  dispatch_unpack:
+  dispatch_final:
     needs: [check_changes, setup_flatdata]
     runs-on: ubuntu-latest
-    if: |
-      always() && 
-      (needs.check_changes.outputs.jp_updated_text == 'true' || needs.check_changes.outputs.gl_updated == 'true' || needs.check_changes.outputs.cn_updated == 'true')
+    if: always() && (needs.check_changes.outputs.jp_updated_text == 'true' || needs.check_changes.outputs.gl_updated == 'true' || needs.check_changes.outputs.cn_updated == 'true')
     steps:
-      - name: Dispatch Unpack
+      - name: Dispatch Tasks
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
             -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_updated_text }}, \"GL_enabled\": ${{ needs.check_changes.outputs.gl_updated }}, \"CN_enabled\": ${{ needs.check_changes.outputs.cn_updated }}}}"
-
-      - name: Dispatch Repack
-        run: |
+          
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
             -d "{\"event_type\": \"Repack\", \"client_payload\": {\"custom_dir\": \"${{ needs.check_changes.outputs.jp_ac_ver }}\"}}"

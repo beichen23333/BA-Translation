@@ -1,0 +1,56 @@
+name: Setup FlatData Worker
+
+on:
+  workflow_call:
+    inputs:
+      server_id:
+        required: true
+        type: string
+      server_name:
+        required: true
+        type: string
+    secrets:
+      APK_SRC_REPO:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Clone Tool
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
+          cp -r tool/* . && rm -rf tool
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Process Data
+        id: process
+        run: |
+          bash other/version.sh ${{ inputs.server_id }} info.json > v_out.tmp
+          VER=$(grep "${{ inputs.server_id }}_FLATDATA_VERSION_NAME" v_out.tmp | cut -d'=' -f2 | tr -d '\r')
+          echo "fl_ver=$VER" >> $GITHUB_OUTPUT
+          python setup_flatdata.py ${{ inputs.server_id }}
+
+      - name: Package and Push
+        env:
+          GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
+        run: |
+          ZIP_NAME="${{ inputs.server_name }}${{ steps.process.outputs.fl_ver }}.zip"
+          cd Extracted && zip -r "../$ZIP_NAME" . && cd ..
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git clone --depth 1 --branch ${{ inputs.server_id }} https://x-access-token:${GH_TOKEN}@github.com/beichen23333/BA-FlatData.git repo_flat
+          cp "$ZIP_NAME" repo_flat/
+          cd repo_flat
+          git add .
+          git commit -m "Upload FlatData: $ZIP_NAME" && git push origin ${{ inputs.server_id }} || echo "No changes"

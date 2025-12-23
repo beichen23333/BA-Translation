@@ -31,7 +31,7 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git
           git clone --depth 1 --branch JP git@github.com:roundRekt/BA-Assets-TableBundles.git BA-Assets-TableBundles
-          git clone --depth 1 --branch JP https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/beichen.git beichen
+          git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/beichen.git beichen
 
       - name: Move contents to current directory
         run: |
@@ -93,3 +93,4 @@ jobs:
         run: |
           python repack_excel.py ./beichen ./Extracted/FlatData ./downloads/TableBundles ./unpacked ./
           python patch_table_catalog.py "$CUSTOM_DIR"
+          python -m update.update_status 2
