@@ -14,9 +14,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       changed: ${{ steps.commit_check.outputs.changed }}
-      jp_up: ${{ steps.status.outputs.jp_up }}
+      jp_updated: ${{ env.JP_updated }}
+      gl_updated: ${{ env.GL_updated }}
+      cn_updated: ${{ env.CN_updated }}
       jp_v: ${{ steps.final_ver.outputs.jp_v }}
-      jp_path: ${{ steps.update_step.outputs.jp_apk_path }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,24 +38,10 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
-      - name: Get Current Versions
-        id: curr_ver
-        run: |
-          VERSION=$(python -c "from update.regions import JPServer; print(JPServer().get_latest_version())")
-          echo "jp_v=$$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Restore JP APK Cache
-        uses: actions/cache/restore@v4
-        with:
-          path: Temp/
-          key: APK-CACHE-JP-${{ steps.curr_ver.outputs.jp_v }}
-          restore-keys: APK-CACHE-JP-
-
       - name: Update Data
         id: update_step
         env: 
           PYTHONUNBUFFERED: "1"
-          JP_APK_CACHE_PATH: ${{ github.workspace }}/$(ls Temp/*.xapk 2>/dev/null | head -n 1)
         run: python update_url.py info.json
 
       - name: Get Final Versions
@@ -62,23 +49,33 @@ jobs:
         run: |
           echo "jp_v=$(jq -r '.JP.APKVersionName // "unknown"' info.json)" >> $GITHUB_OUTPUT
 
-      - name: Save JP APK Cache
-        if: always() && steps.update_step.outputs.jp_apk_path != ''
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ steps.update_step.outputs.jp_apk_path }}
-          key: APK-CACHE-JP-${{ steps.final_ver.outputs.jp_v }}
-
       - name: Commit Changes
         id: commit_check
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
           curl -sS -f https://prod-noticeindex.bluearchiveyostar.com/prod/index.json | jq . > index.json
           git add info.json index.json
+          
+          JP_UPDATED=false
+          GL_UPDATED=false
+          CN_UPDATED=false
+          
           if git diff --cached --quiet; then
             echo "changed=false" >> $GITHUB_OUTPUT
+            echo "JP_updated=false" >> $GITHUB_ENV
+            echo "GL_updated=false" >> $GITHUB_ENV
+            echo "CN_updated=false" >> $GITHUB_ENV
           else
+            git diff --cached info.json > changes.diff
+            if grep -q '"CN"' changes.diff; then CN_UPDATED=true; fi
+            if grep -q '"JP"' changes.diff; then JP_UPDATED=true; fi
+            if grep -q '"GL"' changes.diff; then GL_UPDATED=true; fi
+            
+            echo "JP_updated=$JP_UPDATED" >> $GITHUB_ENV
+            echo "GL_updated=$GL_UPDATED" >> $GITHUB_ENV
+            echo "CN_updated=$CN_UPDATED" >> $GITHUB_ENV
+            
             git commit -m "Update Blue Archive Data: $(date -d "+8 hours" "+%Y-%m-%d %H:%M:%S")"
             git push origin HEAD
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -88,19 +85,23 @@ jobs:
         id: status
         if: steps.commit_check.outputs.changed == 'true'
         run: |
-          JP_UP=$([ -n "${{ steps.update_step.outputs.jp_apk_path }}" ] && echo "true" || echo "false")
-          echo "jp_up=$JP_UP" >> $GITHUB_OUTPUT
           if ! git diff HEAD^ HEAD index.json --quiet; then
             curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "Notic"}'
+          fi
+          
+          if [ "${{ env.JP_updated }}" = "true" ] || [ "${{ env.GL_updated }}" = "true" ] || [ "${{ env.CN_updated }}" = "true" ]; then
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/dispatches -d '{"event_type": "APK"}'
           fi
 
       - name: Generate Strategy Matrix
         id: set-matrix
         if: steps.commit_check.outputs.changed == 'true'
         run: |
-          MATRIX=$(jq -nc --arg jp "${{ steps.status.outputs.jp_up }}" \
+          MATRIX=$(jq -nc --arg jp "${{ env.JP_updated }}" --arg gl "${{ env.GL_updated }}" --arg cn "${{ env.CN_updated }}" \
             '[
-              {id: "JP", name: "日服", enabled: $jp}
+              {id: "JP", name: "日服", enabled: $jp},
+              {id: "GL", name: "国际服", enabled: $gl},
+              {id: "CN", name: "国服", enabled: $cn}
             ] | map(select(.enabled == "true"))')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
@@ -128,19 +129,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
-      
-      - name: Restore JP APK Cache
-        if: matrix.server.id == 'JP'
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ needs.check_changes.outputs.jp_path }}
-          key: APK-CACHE-JP-${{ needs.check_changes.outputs.jp_v }}
-
       - name: Run Setup
-        env:
-          JP_APK_CACHE_PATH: ${{ needs.check_changes.outputs.jp_path }}
         run: python setup_flatdata.py ${{ matrix.server.id }}
-
       - name: Package and Push
         env:
           GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
@@ -163,4 +153,4 @@ jobs:
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_up }}, \"GL_enabled\": false, \"CN_enabled\": false}}"
+            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_updated }}, \"GL_enabled\": ${{ needs.check_changes.outputs.gl_updated }}, \"CN_enabled\": ${{ needs.check_changes.outputs.cn_updated }}}}"
