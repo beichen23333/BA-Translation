@@ -17,6 +17,7 @@ jobs:
       jp_updated: ${{ env.JP_updated }}
       gl_updated: ${{ env.GL_updated }}
       cn_updated: ${{ env.CN_updated }}
+      jp_ac_ver: ${{ steps.save_ver.outputs.jp_ac_ver }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -117,6 +118,10 @@ jobs:
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Save Version to Output
+        id: save_ver
+        run: echo "jp_ac_ver=${{ env.JP_AC_VER }}" >> $GITHUB_OUTPUT
+
       - name: Update Remote Status
         if: steps.commit_check.outputs.changed == 'true' && env.JP_updated == 'true'
         env:
@@ -161,7 +166,9 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0
+
       - name: Clone Tool
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
@@ -219,4 +226,4 @@ jobs:
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Repack\", \"client_payload\": {\"JP_enabled\": ${{ needs.check_changes.outputs.jp_updated }}, \"GL_enabled\": ${{ needs.check_changes.outputs.gl_updated }}, \"CN_enabled\": ${{ needs.check_changes.outputs.cn_updated }}}}"
+            -d "{\"event_type\": \"Repack\", \"client_payload\": {\"custom_dir\": \"${{ needs.check_changes.outputs.jp_ac_ver }}\"}}"
