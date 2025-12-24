@@ -97,22 +97,32 @@ jobs:
       - name: Get Version Info
         id: version_check
         run: |
-          NEW_VER=$(bash other/version.sh ${{ matrix.id }} info.json | grep "${{ matrix.id }}_BA_VERSION_NAME" | cut -d'=' -f2)
+          NEW_VER=$(bash other/version.sh ${{ matrix.id }} info.json | grep "${{ matrix.id }}_BA_VERSION_NAME" | cut -d'=' -f2 | tr -d '[:space:]')
           echo "new_ver=$NEW_VER" >> $GITHUB_OUTPUT
-
-          if git show HEAD~1:info.json > /tmp/prev_info.json 2>/dev/null; then
-            OLD_VER=$(bash other/version.sh ${{ matrix.id }} /tmp/prev_info.json | grep "${{ matrix.id }}_BA_VERSION_NAME" | cut -d'=' -f2)
+          
+          CURRENT_CONTENT=$(cat info.json)
+          PREV_COMMIT=""
+          for commit in $(git log --pretty=format:"%H" -n 50 -- info.json); do
+            PREV_CONTENT=$(git show $commit:info.json 2>/dev/null || echo "")
+            if [ "$PREV_CONTENT" != "$CURRENT_CONTENT" ] && [ -n "$PREV_CONTENT" ]; then
+              PREV_COMMIT=$commit
+              break
+            fi
+          done
+          
+          if [ -z "$PREV_COMMIT" ]; then
+            echo "old_ver=$NEW_VER" >> $GITHUB_OUTPUT
           else
-            OLD_VER="unknown"
+            git show $PREV_COMMIT:info.json > /tmp/prev_info.json
+            OLD_VER=$(bash other/version.sh ${{ matrix.id }} /tmp/prev_info.json | grep "${{ matrix.id }}_BA_VERSION_NAME" | cut -d'=' -f2 | tr -d '[:space:]')
+            echo "old_ver=$OLD_VER" >> $GITHUB_OUTPUT
           fi
-          echo "old_ver=$OLD_VER" >> $GITHUB_OUTPUT
 
       - name: Run Extraction
         run: |
-          python -m tools.extract \
-            "Assets-Repo/${{ matrix.name }}${{ steps.version_check.outputs.new_ver }}.zip" \
-            "Assets-Repo/${{ matrix.name }}${{ steps.version_check.outputs.old_ver }}.zip" \
-            "./BA-Text" other/config.json 10
+          NEW_ZIP="Assets-Repo/${{ matrix.name }}${{ steps.version_check.outputs.new_ver }}.zip"
+          OLD_ZIP="Assets-Repo/${{ matrix.name }}${{ steps.version_check.outputs.old_ver }}.zip"
+          python -m tools.extract "$NEW_ZIP" "$OLD_ZIP" "./BA-Text" other/config.json 10
 
       - name: Commit and Push to BA-Text
         run: |
