@@ -4,7 +4,7 @@
       "NoticeId": 971,
       "StartDate": "2025-12-23T15:00:00",
       "EndDate": "2026-01-02T10:59:00",
-      "Url": "https://prod-notice.bluearchiveyostar.com/prod/971/3466/index627331548.html",
+      "Url": "https://prod-notice.bluearchiveyostar.com/prod/971/3467/index283116670.html",
       "Title": "メンテナンス",
       "DisplayOrder": 0
     }
@@ -27,7 +27,16 @@
       "DisplayOrder": 0
     }
   ],
-  "Issues": [],
+  "Issues": [
+    {
+      "NoticeId": 973,
+      "StartDate": "2025-12-24T15:00:00",
+      "EndDate": "2026-01-07T10:59:00",
+      "Url": "https://prod-notice.bluearchiveyostar.com/prod/973/3469/index840172295.html",
+      "Title": "[12月24日(水曜日)]既知の不具合）",
+      "DisplayOrder": 0
+    }
+  ],
   "Maintenance": {
     "StartDate": "2025-12-24T11:00:00",
     "EndDate": "2025-12-24T19:00:00",
