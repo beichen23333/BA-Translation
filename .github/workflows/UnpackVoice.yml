@@ -25,7 +25,7 @@ jobs:
         run: |
           git clone https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/PyCriCodecs
           cd PyCriCodecs
-          pip install .
+          pip install . requests
           cd ..
 
       - name: Restore Cache
