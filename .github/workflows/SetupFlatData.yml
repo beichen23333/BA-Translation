@@ -15,9 +15,9 @@ jobs:
         run: |
           MATRIX=$(jq -nc --arg jp "${{ github.event.client_payload.jp_updated }}" --arg gl "${{ github.event.client_payload.gl_updated }}" --arg cn "${{ github.event.client_payload.cn_updated }}" \
             '[
-              {id: "JP", name: "日服", enabled: $jp},
-              {id: "GL", name: "国际服", enabled: $gl},
-              {id: "CN", name: "国服", enabled: $cn}
+              {id: "JP", name: "日服", enabled: True},
+              {id: "GL", name: "国际服", enabled: True},
+              {id: "CN", name: "国服", enabled: True}
             ] | map(select(.enabled == "true"))')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
@@ -68,17 +68,3 @@ jobs:
           git add .
           git commit -m "Upload FlatData: $ZIP_NAME" && git push origin ${{ matrix.server.id }} || echo "No changes"
 
-  dispatch_final:
-    needs: [prepare, build]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Dispatch Tasks
-        run: |
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Unpack\", \"client_payload\": {\"JP_enabled\": ${{ github.event.client_payload.jp_updated }}, \"GL_enabled\": ${{ github.event.client_payload.gl_updated }}, \"CN_enabled\": ${{ github.event.client_payload.cn_updated }}}}"
-          
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/dispatches \
-            -d "{\"event_type\": \"Repack\", \"client_payload\": {\"custom_dir\": \"${{ github.event.client_payload.jp_ac_ver }}\"}}"
