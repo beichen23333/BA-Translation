@@ -35,6 +35,8 @@ jobs:
           key: audio-voc-cn-data
 
       - name: Run Downloader and Extractor
+        env:
+          PYTHONUNBUFFERED: "1"
         run: python unpack_voicecn.py
 
       - name: Push to BA-VoiceCN
