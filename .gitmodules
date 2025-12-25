@@ -1,3 +1,9 @@
 [submodule "assets/beichen"]
 	path = assets/beichen
 	url = git@github.com:beichen23333/beichen.git
+[submodule "assets/CommonPNGAssets"]
+	path = assets/CommonPNGAssets
+	url = git@github.com:beichen23333/BA-CommonPNGAssets.git
+[submodule "assets/VoiceCN"]
+	path = assets/VoiceCN
+	url = git@github.com:beichen23333/BA-VoiceCN.git
