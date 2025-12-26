@@ -109,13 +109,24 @@ jobs:
           cp -r tool/* . && rm -rf tool
           pip install -r requirements.txt
 
-      - name: Setup FlatData
-        if: steps.cache-flatdata.outputs.cache-hit != 'true'
-        run: python setup_flatdata.py ${{ matrix.id }}
-
       - name: Clone FlatData Branch
         run: |
           git clone --depth 1 --branch ${{ matrix.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git repo_data
+
+      - name: Copy CN Dump File
+        if: matrix.id == 'CN'
+        run: |
+          mkdir -p Extracted/Dumps
+          if [ -f "repo_data/dump.cs" ]; then
+            cp repo_data/dump.cs Extracted/Dumps/dump.cs
+            echo "Successfully copied dump.cs for CN server."
+          else
+            echo "Warning: dump.cs not found in repo_data."
+          fi
+
+      - name: Setup FlatData
+        if: steps.cache-flatdata.outputs.cache-hit != 'true'
+        run: python setup_flatdata.py ${{ matrix.id }}
 
       - name: Create Zip and Move
         run: |
