@@ -93,4 +93,3 @@ jobs:
         run: |
           python repack_excel.py ./beichen/latest/TableBundles/buildSrc ./Extracted/FlatData ./downloads/TableBundles ./unpacked ./
           python patch_table_catalog.py "$CUSTOM_DIR"
-          python -m update.update_status 2
