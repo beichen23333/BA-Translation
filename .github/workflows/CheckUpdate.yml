@@ -72,7 +72,7 @@ jobs:
 
   process:
     needs: check
-    if: needs: check.outputs.has_changes == 'true'
+    if: needs.check.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.check.outputs.matrix) }}
@@ -87,6 +87,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Cache FlatData
+        id: cache-flatdata
+        uses: actions/cache@v4
+        with:
+          path: Extracted/FlatData
+          key: ${{ matrix.id }}-flatdata-${{ matrix.version }}
+
       - name: Prepare Tool Environment
         run: |
           git clone --depth 1 https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BlueArchive-Translation.git tool
@@ -94,6 +101,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Setup FlatData
+        if: steps.cache-flatdata.outputs.cache-hit != 'true'
         run: python setup_flatdata.py ${{ matrix.id }}
 
       - name: Clone FlatData Branch
@@ -112,5 +120,5 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add .
-          git commit -m "Upload Data: ${{ matrix.name }} ${{ matrix.version }}"
+          git commit -m "Upload Data: ${{ matrix.name }} ${{ matrix.version }}" --allow-empty
           git push origin ${{ matrix.id }}
