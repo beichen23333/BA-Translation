@@ -28,15 +28,10 @@ jobs:
           pip install . requests
           cd ..
 
-      - name: Restore Cache
-        uses: actions/cache/restore@v3
-        with:
-          path: audio/voc_cn/scenario/
-          key: audio-voc-cn-data
-
       - name: Run Downloader and Extractor
         env:
           PYTHONUNBUFFERED: "1"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python unpack_voicecn.py
 
       - name: Push to BA-VoiceCN
@@ -47,16 +42,3 @@ jobs:
           git add .
           git commit -m "Update Voice Resources $(date +'%Y-%m-%d %H:%M')" || exit 0
           git push
-
-      - name: Delete Old Cache
-        run: |
-          gh extension install actions/gh-actions-cache
-          gh actions-cache delete "audio-voc-cn-data" --confirm || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Save New Cache
-        uses: actions/cache/save@v3
-        with:
-          path: audio/voc_cn/scenario/
-          key: audio-voc-cn-data
