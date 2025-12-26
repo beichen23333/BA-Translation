@@ -44,9 +44,18 @@ jobs:
           if git diff --staged --quiet; then
             echo "No file changes to commit."
           else
-            git commit -m "Update versions"
+            git commit -m "Update: JP(${{ steps.run_script.outputs.jp_version_changed }}) GL(${{ steps.run_script.outputs.gl_version_changed }}) CN(${{ steps.run_script.outputs.cn_version_changed }})"
             git push
           fi
+
+      - name: Print Outputs
+        run: |
+          echo "JP Version: ${{ steps.run_script.outputs.jp_version }}"
+          echo "JP Version Changed: ${{ steps.run_script.outputs.jp_version_changed }}"
+          echo "JP Server Info Name: ${{ steps.run_script.outputs.jp_server_info_name }}"
+          echo "JP Addressable Name: ${{ steps.run_script.outputs.jp_addressable_name }}"
+          echo "GL Version Changed: ${{ steps.run_script.outputs.gl_version_changed }}"
+          echo "CN Version Changed: ${{ steps.run_script.outputs.cn_version_changed }}"
 
       - name: Generate Matrix Output
         id: set-matrix
@@ -54,15 +63,15 @@ jobs:
           MATRIX_JSON='{"include":[]}'
           HAS_CHANGES="false"
 
-          if [ "${{ steps.run_script.outputs.jp_version_changed }}" == "True" ]; then
+          if [ "${{ steps.run_script.outputs.jp_version_changed }}" == "true" ]; then
             MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "JP", "name": "日服", "version": "${{ steps.run_script.outputs.jp_version }}"}]')
             HAS_CHANGES="true"
           fi
-          if [ "${{ steps.run_script.outputs.gl_version_changed }}" == "True" ]; then
+          if [ "${{ steps.run_script.outputs.gl_version_changed }}" == "true" ]; then
             MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "GL", "name": "国际服", "version": "${{ steps.run_script.outputs.gl_version }}"}]')
             HAS_CHANGES="true"
           fi
-          if [ "${{ steps.run_script.outputs.cn_version_changed }}" == "True" ]; then
+          if [ "${{ steps.run_script.outputs.cn_version_changed }}" == "true" ]; then
             MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "CN", "name": "国服", "version": "${{ steps.run_script.outputs.cn_version }}"}]')
             HAS_CHANGES="true"
           fi
