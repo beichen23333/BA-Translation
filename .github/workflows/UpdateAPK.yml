@@ -1,4 +1,4 @@
-name: Update-APK
+Name: Update-APK
 
 on:
   workflow_dispatch:
@@ -44,6 +44,9 @@ jobs:
       - name: Run extraction script
         env:
           PYTHONUNBUFFERED: "1"
-          SSH_SECRETS: ${{ secrets.SSH_SECRETS }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           python update_apk.py
