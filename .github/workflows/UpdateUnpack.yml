@@ -88,25 +88,13 @@ jobs:
           echo "ver=$V_BA" >> $GITHUB_OUTPUT
           echo "fl_ver=$V_FL" >> $GITHUB_OUTPUT
 
-      - name: Verify Remote Version Status
-        id: check
-        run: |
-          if [[ "${{ github.event_name }}" =~ (workflow|repository)_dispatch ]]; then
-            echo "run=true" >> $GITHUB_OUTPUT
-          else
-            git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:roundRekt/BA-Assets-TableBundles.git check
-            [ -f "check/${{ matrix.server.name }}${{ steps.v.outputs.ver }}.zip" ] && echo "run=false" >> $GITHUB_OUTPUT || echo "run=true" >> $GITHUB_OUTPUT
-          fi
-
       - name: Install Dependencies
-        if: steps.check.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
 
       - name: Clone and Unpack FlatData
-        if: steps.check.outputs.run == 'true'
         run: |
           git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git flat_repo
           mkdir -p Extracted
@@ -119,25 +107,21 @@ jobs:
           fi
 
       - name: Clone Text Repository
-        if: steps.check.outputs.run == 'true'
         run: |
           git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:roundRekt/BA-Assets-TableBundles.git BA-Text
 
       - name: Execute Unpack Scripts
-        if: steps.check.outputs.run == 'true'
         run: |
           chmod +x update/update_table.sh
           update/update_table.sh ${{ matrix.server.id }}
           python unpack_excel.py ./downloads/TableBundles/ExcelDB.db ./downloads/TableBundles/Excel.zip ./Extracted/FlatData ./unpacked ${{ matrix.server.id }}
 
       - name: Organize Artifacts
-        if: steps.check.outputs.run == 'true' && success()
         run: |
           mkdir -p workspace/bundle_raw
           cp -r unpacked/* workspace/bundle_raw/
 
       - name: Upload Artifact
-        if: steps.check.outputs.run == 'true' && success()
         uses: actions/upload-artifact@v4
         with:
           name: table-${{ matrix.server.id }}
