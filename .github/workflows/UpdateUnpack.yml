@@ -159,9 +159,7 @@ jobs:
             if [ -d "all-artifacts/table-$s" ]; then
               SERVER_ID_LOWER=$(echo "$s" | tr '[:upper:]' '[:lower:]')
               bash tool/other/version.sh "$s" "info_${SERVER_ID_LOWER}.json"
-              
-              V_BA=$(grep "BA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
-              
+              V_BA=$(grep "${s}_BA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
               case $s in
                 JP) NAME="日服" ;;
                 GL) NAME="国际服" ;;
