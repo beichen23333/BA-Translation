@@ -1,7 +1,7 @@
 {
     "ServerInfoDataUrl": "https://gs-api.bluearchive-cn.com/api/state",
     "AddressableCatalogUrl": "https://static.bluearchive-cn.com/prodm39",
-    "GameVersion": "2.1",
+    "GameVersion": "2.1.2",
     "TableVersion": "202512151605",
     "MediaVersion": "202512121443",
     "ResourceVersion": "202512121450"
