@@ -157,19 +157,17 @@ jobs:
           mkdir -p final-packages
           for s in JP GL CN; do
             if [ -d "all-artifacts/table-$s" ]; then
+              SERVER_ID_LOWER=$(echo "$s" | tr '[:upper:]' '[:lower:]')
+              bash tool/other/version.sh "$s" "info_${SERVER_ID_LOWER}.json"
+              V_BA=$(grep "${s}_BA_VERSION_NAME" "$GITHUB_OUTPUT" | cut -d'=' -f2)
               case $s in
                 JP) NAME="日服" ;;
                 GL) NAME="国际服" ;;
                 CN) NAME="国服" ;;
               esac
               
-              SERVER_ID_LOWER=$(echo "$s" | tr '[:upper:]' '[:lower:]')
-              bash tool/other/version.sh "$s" "info_${SERVER_ID_LOWER}.json" > temp_v.txt
-              V_BA=$(grep "BA_VERSION_NAME" temp_v.txt | cut -d'=' -f2)
-              
-              FILE_NAME="${NAME}${V_BA}.zip"
-              
               cd "all-artifacts/table-$s/bundle_raw"
+              FILE_NAME="${NAME}${V_BA}.zip"
               zip -r "../../../final-packages/$FILE_NAME" DBSchema ExcelTable
               cd ../../../
 
@@ -177,12 +175,8 @@ jobs:
               cp "final-packages/$FILE_NAME" "repo-$s/"
               cd "repo-$s"
               git add .
-              if ! git diff --staged --quiet; then
-                git commit -m "Update $NAME $V_BA"
-                git push origin $s
-              fi
+              git diff --staged --quiet || (git commit -m "Update $NAME $V_BA" && git push origin $s)
               cd ..
-              rm temp_v.txt
             fi
           done
 
