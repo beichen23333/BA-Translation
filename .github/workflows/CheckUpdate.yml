@@ -5,6 +5,7 @@ on:
 
 jobs:
   check:
+    name: 检查
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -50,36 +51,38 @@ jobs:
 
       - name: Print Outputs
         run: |
-          echo "JP Version: ${{ steps.run_script.outputs.jp_version }}"
-          echo "JP Version Changed: ${{ steps.run_script.outputs.jp_version_changed }}"
           echo "JP Server Info Name: ${{ steps.run_script.outputs.jp_server_info_name }}"
           echo "JP Addressable Name: ${{ steps.run_script.outputs.jp_addressable_name }}"
-          echo "GL Version Changed: ${{ steps.run_script.outputs.gl_version_changed }}"
-          echo "CN Version Changed: ${{ steps.run_script.outputs.cn_version_changed }}"
 
       - name: Generate Matrix Output
         id: set-matrix
         run: |
           MATRIX_JSON='{"include":[]}'
           HAS_CHANGES="false"
+          DEPLOY_JP="${{ steps.run_script.outputs.jp_catalog_changed }}"
+          DEPLOY_CN="${{ steps.run_script.outputs.cn_table_changed }}"
+          DEPLOY_GL="${{ steps.run_script.outputs.gl_catalog_changed }}"
 
           if [ "${{ steps.run_script.outputs.jp_version_changed }}" == "true" ]; then
-            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "JP", "name": "日服", "version": "${{ steps.run_script.outputs.jp_version }}"}]')
+            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c --arg deploy "$DEPLOY_JP" '.include += [{"id": "JP", "name": "日服", "version": "${{ steps.run_script.outputs.jp_version }}", "deploy": $deploy}]')
             HAS_CHANGES="true"
           fi
+
           if [ "${{ steps.run_script.outputs.gl_version_changed }}" == "true" ]; then
-            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "GL", "name": "国际服", "version": "${{ steps.run_script.outputs.gl_version }}"}]')
+            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c --arg deploy "$DEPLOY_GL" '.include += [{"id": "GL", "name": "国际服", "version": "${{ steps.run_script.outputs.gl_version }}", "deploy": $deploy}]')
             HAS_CHANGES="true"
           fi
+
           if [ "${{ steps.run_script.outputs.cn_version_changed }}" == "true" ]; then
-            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c '.include += [{"id": "CN", "name": "国服", "version": "${{ steps.run_script.outputs.cn_version }}"}]')
+            MATRIX_JSON=$(echo $MATRIX_JSON | jq -c --arg deploy "$DEPLOY_CN" '.include += [{"id": "CN", "name": "国服", "version": "${{ steps.run_script.outputs.cn_version }}", "deploy": $deploy}]')
             HAS_CHANGES="true"
           fi
 
           echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
           echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
 
-  process:
+  FlatData:
+    name: 处理${{ matrix.server.name }}
     needs: check
     if: needs.check.outputs.has_changes == 'true'
     runs-on: ubuntu-latest

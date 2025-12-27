@@ -89,17 +89,12 @@ jobs:
           sudo apt-get install -y libsqlcipher-dev
           pip install pysqlcipher3 sqlcipher3 -r requirements.txt
 
-      - name: Clone and Unpack FlatData
-        run: |
-          git clone --depth 1 --branch ${{ matrix.server.id }} https://x-access-token:${{ secrets.APK_SRC_REPO }}@github.com/beichen23333/BA-FlatData.git flat_repo
-          mkdir -p Extracted
-          ZIP_NAME="${{ matrix.server.name }}${{ steps.v.outputs.FLATDATA_VERSION_NAME }}.zip"
-          if [ -f "flat_repo/$ZIP_NAME" ]; then
-            unzip -o "flat_repo/$ZIP_NAME" -d ./Extracted
-          else
-            echo "FlatData ZIP $ZIP_NAME not found"
-            exit 1
-          fi
+      - name: Cache FlatData
+        id: cache-flatdata
+        uses: actions/cache@v4
+        with:
+          path: Extracted/FlatData
+          key: ${{ matrix.id }}-flatdata-${{ steps.v.outputs.FLATDATA_VERSION_NAME }}
 
       - name: Clone Text Repository
         run: |
