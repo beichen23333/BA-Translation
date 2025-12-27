@@ -152,7 +152,7 @@ jobs:
           pattern: table-*
           merge-multiple: false
 
-- name: Package and Push
+      - name: Package and Push
         run: |
           mkdir -p final-packages
           for s in JP GL CN; do
