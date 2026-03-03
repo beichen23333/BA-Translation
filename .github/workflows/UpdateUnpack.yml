@@ -194,10 +194,3 @@ jobs:
             fi
           done
 
-      - name: Trigger Extract Dispatch
-        if: github.event_name == 'repository_dispatch' && success()
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: Extract
-          client-payload: '{"JP_enabled": "${{ needs.setup.outputs.jp_enabled }}", "GL_enabled": "${{ needs.setup.outputs.gl_enabled }}", "CN_enabled": "${{ needs.setup.outputs.cn_enabled }}"}'
