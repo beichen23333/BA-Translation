@@ -105,6 +105,26 @@ jobs:
           path: Extracted
           key: ${{ matrix.server.id }}-flatdata-${{ steps.v.outputs.FLATDATA_VERSION_NAME }}
 
+      - name: Clone FlatData Branch
+        if: steps.cache-flatdata.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:bluearchive-cafe/BA-FlatData.git repo_data
+
+      - name: Copy CN Dump File
+        if: steps.cache-flatdata.outputs.cache-hit != 'true' && matrix.server.id == 'CN'
+        run: |
+          mkdir -p Dumps
+          if [ -f "repo_data/dump.cs" ]; then
+            cp repo_data/dump.cs Dumps/dump.cs
+            echo "Successfully copied dump.cs for CN server."
+          else
+            echo "Warning: dump.cs not found in repo_data."
+          fi
+
+      - name: Setup FlatData
+        if: steps.cache-flatdata.outputs.cache-hit != 'true'
+        run: python setup_flatdata.py ${{ matrix.server.id }}
+
       - name: Clone Text Repository
         run: |
           git clone --depth 1 --branch ${{ matrix.server.id }} git@github.com:bluearchive-cafe/BA-Assets-TableBundles.git BA-Text
