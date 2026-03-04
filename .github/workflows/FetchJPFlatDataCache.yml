@@ -1,0 +1,55 @@
+name: Fetch JP FlatData Cache
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Fetch-JP-FlatData:
+    name: 缓存日服FlatData
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH Access
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare Tool Environment
+        run: |
+          git clone --depth 1 git@github.com:bluearchive-cafe/BlueArchive-Translation.git tool
+          cp -r tool/* . && rm -rf tool
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Get JP Version
+        id: get_version
+        env:
+          PYTHONUNBUFFERED: "1"
+          GH_TOKEN: ${{ secrets.APK_SRC_REPO }}
+        run: |
+          # 运行 update_url 获取版本号信息
+          : > "$GITHUB_OUTPUT"
+          python -m update.update_url
+
+      - name: Cache FlatData
+        id: cache-flatdata
+        uses: actions/cache@v4
+        with:
+          path: Extracted
+          key: JP-flatdata-${{ steps.get_version.outputs.jp_version }}
+
+      - name: Setup FlatData
+        if: steps.cache-flatdata.outputs.cache-hit != 'true'
+        run: python setup_flatdata.py JP
