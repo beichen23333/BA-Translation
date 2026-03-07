@@ -30,7 +30,7 @@ jobs:
 
       - name: Clone repositories
         run: |
-          git clone --depth 1 git@github.com:bluearchive-cafe/BlueArchive-Translation.git BlueArchive-Translation
+          git clone --depth 1 git@github.com:beichen23333/BlueArchive-Translation.git BlueArchive-Translation
           git clone --depth 1 --branch JP git@github.com:bluearchive-cafe/BA-Assets-TableBundles.git BA-Assets-TableBundles
 
       - name: Move contents to current directory

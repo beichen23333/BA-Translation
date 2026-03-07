@@ -51,7 +51,7 @@ jobs:
 
       - name: Clone repository
         run: |
-          git clone --depth 1 git@github.com:bluearchive-cafe/BlueArchive-Translation.git tool
+          git clone --depth 1 git@github.com:beichen23333/BlueArchive-Translation.git tool
           git clone --depth 1 git@github.com:bluearchive-cafe/BA-Text-Translation.git BA-Text-Translation
           git clone --depth 1 git@github.com:bluearchive-cafe/BA-VoiceCN.git
           git clone --depth 1 git@github.com:bluearchive-cafe/bluearchive-cafe-prod-clientpatch.git

@@ -52,7 +52,7 @@ jobs:
 
       - name: Prepare Tool Environment
         run: |
-          git clone --depth 1 git@github.com:bluearchive-cafe/BlueArchive-Translation.git tool
+          git clone --depth 1 git@github.com:beichen23333/BlueArchive-Translation.git tool
           cp -r tool/* . && rm -rf tool
           pip install requests
 
