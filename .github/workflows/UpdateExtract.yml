@@ -47,8 +47,10 @@ jobs:
               {id: "GL", name: "国际服", enabled: $gl},
               {id: "CN", name: "国服", enabled: $cn}
             ] | map(select(.enabled == "true" or .enabled == true))')
+          
+          COUNT=$(echo $MATRIX | jq '. | length')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-          echo "run_jobs=$(echo $MATRIX | jq '. | length')" >> $GITHUB_OUTPUT
+          echo "run_jobs=$COUNT" >> $GITHUB_OUTPUT
 
   deploy:
     needs: setup
@@ -76,20 +78,23 @@ jobs:
         run: |
           git clone --depth 1 --branch ${{ matrix.id }} git@github.com:beichen23333/BA-Text.git BA-Text
           git clone --branch ${{ matrix.id }} git@github.com:beichen23333/BA-Assets-TableBundles.git Assets-Repo
-          git clone --depth 2 --branch ${{ matrix.id }} git@github.com:beichen23333/BA-All-Text.git BA-All-Text
+          git clone --depth 1 --branch ${{ matrix.id }} git@github.com:beichen23333/BA-All-Text.git BA-All-Text
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
+      - name: Run Login
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
       - name: Prepare Tool Environment
         run: |
           git clone --depth 1 git@github.com:beichen23333/BlueArchive-Translation.git tool
           cp -r tool/* . && rm -rf tool
           pip install -r requirements.txt
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
 
       - name: Get Version info
         id: v
@@ -97,95 +102,78 @@ jobs:
           SERVER_ID_LOWER=$(echo "${{ matrix.id }}" | tr '[:upper:]' '[:lower:]')
           bash other/version.sh ${{ matrix.id }} info_${SERVER_ID_LOWER}.json >> "$GITHUB_OUTPUT"
 
-      - name: Get Previous Base Version
+      - name: Find last meaningful change in info.json
         id: prev_v
         run: |
           SERVER_ID_LOWER=$(echo "${{ matrix.id }}" | tr '[:upper:]' '[:lower:]')
           ORIGINAL_FILE="info_${SERVER_ID_LOWER}.json"
-          # 直接拿上一个记录作为对比基准，不管版本号是否相同
-          PREV_JSON=$(git show HEAD^:"$ORIGINAL_FILE" 2>/dev/null || echo "")
-          if [ -n "$PREV_JSON" ]; then
-            echo "$PREV_JSON" > /tmp/prev_info.json
-            bash other/version.sh ${{ matrix.id }} /tmp/prev_info.json >> "$GITHUB_OUTPUT"
-          else
-            echo "BA_VERSION_NAME=${{ steps.v.outputs.BA_VERSION_NAME }}" >> "$GITHUB_OUTPUT"
+          CURRENT_CONTENT=$(cat "$ORIGINAL_FILE")
+          
+          for commit in $(git log --pretty=format:"%H" -- "$ORIGINAL_FILE"); do
+            PREV_CONTENT=$(git show $commit:"$ORIGINAL_FILE" 2>/dev/null || echo "")
+            
+            if [ "$PREV_CONTENT" != "$CURRENT_CONTENT" ] && [ -n "$PREV_CONTENT" ]; then
+              PREV_COMMIT=$commit
+              break
+            fi
+          done
+          
+          if [ -z "$PREV_COMMIT" ]; then
+            echo "No previous version with different content found"
+            exit 1
           fi
+          
+          echo "Found meaningful previous commit: $PREV_COMMIT"
+          git show $PREV_COMMIT:"$ORIGINAL_FILE" > /tmp/prev_"$ORIGINAL_FILE".json
+          echo "Previous info.json content:"
+          cat /tmp/prev_"$ORIGINAL_FILE".json
+          
+          echo "Running version.sh on previous info.json:"
+          bash other/version.sh ${{ matrix.id }} /tmp/prev_"$ORIGINAL_FILE".json >> "$GITHUB_OUTPUT"
+          echo "prev_commit=$PREV_COMMIT" >> "$GITHUB_OUTPUT"
 
-      - name: Sync All-Text Repository
-        id: sync_all
+      - name: Run Clean
         run: |
+          rm -rf BA-Text/Revise
+          rm -rf BA-Text/New
+          rm -rf BA-Text/Translation
+          rm -rf BA-Text/Translation_Revise
+
           NEW_ZIP="Assets-Repo/${{ matrix.name }}${{ steps.v.outputs.BA_VERSION_NAME }}.zip"
           OUT_ZIP="BA-All-Text/${{ matrix.name }}${{ steps.v.outputs.BA_VERSION_NAME }}.zip"
-          # 仅在资源文件确实存在时更新 All-Text 基准
-          if [ -f "$NEW_ZIP" ]; then
-            python -m tools.clean "$NEW_ZIP" "$OUT_ZIP" ${{ matrix.id }}
-            cd BA-All-Text
-            git add .
-            if ! git diff --cached --quiet; then
-              git commit -m "Sync Base: ${{ steps.v.outputs.BA_VERSION_NAME }}"
-              git push origin ${{ matrix.id }}
-            fi
-          fi
+          python -m tools.clean "$NEW_ZIP" "$OUT_ZIP" ${{ matrix.id }}
+
+      - name: Commit and Push to BA-All-Text
+        run: |
+          cd BA-All-Text
+          git add .
+          git commit -m "上传 ${{ matrix.id }}${{ steps.v.outputs.BA_VERSION_NAME }}" || exit 0
+          git push origin ${{ matrix.id }}
 
       - name: Run Extract
-        id: extract_step
         run: |
-          CUR_ZIP="BA-All-Text/${{ matrix.name }}${{ steps.v.outputs.BA_VERSION_NAME }}.zip"
+          NEW_ZIP="BA-All-Text/${{ matrix.name }}${{ steps.v.outputs.BA_VERSION_NAME }}.zip"
           OLD_ZIP="Assets-Repo/${{ matrix.name }}${{ steps.prev_v.outputs.BA_VERSION_NAME }}.zip"
-          
-          rm -rf BA-Text/New BA-Text/Revise
-          
-          python -m tools.extract "$CUR_ZIP" "$OLD_ZIP" "./BA-Text" ${{ matrix.id }}
-          
-          # 检查 New 或 Revise 下是否有文件
-          COUNT=$(find BA-Text/New BA-Text/Revise -name "*.json" 2>/dev/null | wc -l)
-          echo "Changes found: $COUNT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "HAS_CONTENT=true" >> $GITHUB_OUTPUT
-          else
-            echo "HAS_CONTENT=false" >> $GITHUB_OUTPUT
-          fi
+          python -m tools.extract "$NEW_ZIP" "$OLD_ZIP" "./BA-Text" ${{ matrix.id }}
 
       - name: Commit and Push to BA-Text
-        if: steps.extract_step.outputs.HAS_CONTENT == 'true'
         run: |
           cd BA-Text
-          git add New/ Revise/
-          git commit -m "提取 ${{ matrix.id }} text: ${{ steps.v.outputs.BA_VERSION_NAME }} (from ${{ steps.prev_v.outputs.BA_VERSION_NAME }})"
+          git add .
+          git commit -m "提取 ${{ matrix.id }} text: ${{ steps.v.outputs.BA_VERSION_NAME }} (from ${{ steps.prev_v.outputs.BA_VERSION_NAME }})" || exit 0
           git push origin ${{ matrix.id }}
 
   Final:
     name: 部署
     needs: [setup, deploy]
-    if: always() && needs.setup.outputs.jp == 'true' && needs.deploy.result == 'success'
+    if: needs.setup.outputs.jp == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Configure SSH Access
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-
-      - name: Clone Required Repositories
-        run: |
-          git clone --depth 1 --branch JP git@github.com:beichen23333/BA-Text.git BA-Text
-
-      - name: Check Recent Activity
-        id: check
-        run: |
-          cd BA-Text
-          LAST_COMMIT_TIME=$(git log -1 --format=%ct)
-          NOW=$(date +%s)
-          if [ $((NOW - LAST_COMMIT_TIME)) -lt 300 ]; then
-            echo "TRIGGER=true" >> $GITHUB_OUTPUT
-          else
-            echo "TRIGGER=false" >> $GITHUB_OUTPUT
-          fi
       - name: Deploy Translation
-        if: steps.check.outputs.TRIGGER == 'true'
         run: |
           curl -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
             -d '{"event_type": "Translation","client_payload": {"file_path": "BA-Text/New|BA-Text/Revise","output_path": "BA-Text/Translation|BA-Text/Translation_Revise", "batch_size": "20","max_workers": "10"}}'
